@@ -1,5 +1,7 @@
 # HalluMeter
 
+By [Efstathios Outas (EFS.O)](https://github.com/Efs-O)
+
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github)](https://github.com/sponsors/Efs-O)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-☕-yellow?logo=buymeacoffee)](https://buymeacoffee.com/efs.o)
 
