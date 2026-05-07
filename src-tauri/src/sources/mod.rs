@@ -1,4 +1,4 @@
-// JSONL session readers for Claude Code, Codex, and Continue.
+// JSONL session readers for Claude Code, Codex, Forge (Copilot CLI), and Continue.
 // Each returns (model_id, fill_pct, session_title, tokens, last_active_ms) or None.
 
 use std::cmp::Reverse;
@@ -8,13 +8,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod claude;
 mod codex;
+mod continue_bridge_yaml;
 mod continue_reader;
 mod continue_types;
+mod forge;
 
 // Public API used by lib.rs
 pub use claude::read_claude_jsonl_usage;
 pub use codex::read_codex_jsonl_usage;
 pub use continue_reader::read_continue_usage;
+pub use forge::read_forge_usage;
 
 // Items used by tests.rs (cfg(test) gate suppresses unused-import warnings in non-test builds)
 #[cfg(test)]

@@ -145,7 +145,21 @@ fn persist_always_on_top(app: &tauri::AppHandle, always_on_top: bool) {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+                let st = app.state::<AppColorState>().0.lock().unwrap().clone();
+                set_tray_color(app, &st);
+            }
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
@@ -255,12 +269,15 @@ pub fn run() {
 
             std::thread::spawn(move || {
                 use crate::core::{interpolate_curve, risk_to_state, ContextPayload};
+                use crate::settings::resolve_continue_bridge_yaml_path;
                 use crate::sources::{
                     read_claude_jsonl_usage, read_codex_jsonl_usage, read_continue_usage,
+                    read_forge_usage,
                 };
 
                 let activity_secs = cfg.activity_window_mins * 60;
                 let correlation_ms = cfg.continue_correlation_secs as i64 * 1000;
+                let continue_bridge_yaml = resolve_continue_bridge_yaml_path(&cfg);
                 let stale_timeout = Duration::from_secs(cfg.stale_timeout_secs);
 
                 let mut last_data = Instant::now();
@@ -277,7 +294,12 @@ pub fn run() {
                     let mut candidates: Vec<(String, f64, String, u64, i64, f64)> = [
                         read_claude_jsonl_usage(activity_secs, cfg.claude_max_files),
                         read_codex_jsonl_usage(activity_secs, cfg.codex_max_files),
-                        read_continue_usage(activity_secs, correlation_ms),
+                        read_forge_usage(activity_secs, cfg.forge_max_files),
+                        read_continue_usage(
+                            activity_secs,
+                            correlation_ms,
+                            continue_bridge_yaml.clone(),
+                        ),
                     ]
                     .into_iter()
                     .flatten()

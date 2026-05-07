@@ -24,10 +24,8 @@ fn claude_session_title(content: &str) -> Option<String> {
                 }
             }
             Some("ai-title") => {
-                if ai_title.is_none() {
-                    if let Some(t) = v.get("aiTitle").and_then(|t| t.as_str()) {
-                        ai_title = Some(t.to_string());
-                    }
+                if let Some(t) = v.get("aiTitle").and_then(|t| t.as_str()) {
+                    ai_title = Some(t.to_string());
                 }
             }
             _ => {

@@ -3,7 +3,32 @@
 
 use crate::core::{AMBER_THRESHOLD, RED_THRESHOLD};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// If `UserSettings::continue_bridge_yaml` points to an existing file, that path
+/// is used. Otherwise, when `Desktop/llamabridge/config/bridge.yaml` exists under
+/// `USERPROFILE` / `HOME`, that file is used (for local llamabridge setups).
+pub fn resolve_continue_bridge_yaml_path(settings: &UserSettings) -> Option<PathBuf> {
+    if let Some(ref s) = settings.continue_bridge_yaml {
+        let p = PathBuf::from(s.trim());
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    let p = PathBuf::from(home)
+        .join("Desktop")
+        .join("llamabridge")
+        .join("config")
+        .join("bridge.yaml");
+    if p.is_file() {
+        Some(p)
+    } else {
+        None
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -16,8 +41,15 @@ pub struct UserSettings {
     pub claude_max_files: usize,
     /// Max number of Codex session files considered per poll cycle.
     pub codex_max_files: usize,
+    /// Max number of Forge / Copilot CLI session dirs considered per poll cycle.
+    pub forge_max_files: usize,
     /// Max time gap between a Continue chat event and its matching token event (seconds).
     pub continue_correlation_secs: u64,
+    /// Optional path to a llamabridge `bridge.yaml` (or compatible `models: … num_ctx:`).
+    /// When the file exists, model context sizes are read from it instead of
+    /// `~/.continue/config.yaml`. If unset, HalluMeter also checks
+    /// `Desktop/llamabridge/config/bridge.yaml` under the user profile when that file exists.
+    pub continue_bridge_yaml: Option<String>,
     /// Risk score at which the ring turns amber (0.0–1.0).
     pub amber_threshold: f64,
     /// Risk score at which the ring turns red (0.0–1.0).
@@ -40,7 +72,9 @@ impl Default for UserSettings {
             stale_timeout_secs: 30,
             claude_max_files: 6,
             codex_max_files: 10,
+            forge_max_files: 10,
             continue_correlation_secs: 120,
+            continue_bridge_yaml: None,
             amber_threshold: AMBER_THRESHOLD,
             red_threshold: RED_THRESHOLD,
             context_overhead_pct: 5.0,

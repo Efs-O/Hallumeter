@@ -36,10 +36,11 @@ Audio cues play periodically as a background reminder, so you don't have to watc
 | Claude Code (CLI) | Supported |
 | Claude Code (VS Code / Cursor extension) | Supported |
 | OpenAI Codex (CLI) | Supported |
-| Continue (VS Code / JetBrains) | Supported — local LLMs via `~/.continue/config.yaml` |
+| Continue (VS Code / JetBrains) | Supported — local LLMs via `~/.continue/config.yaml` or [LlamaBridge](https://github.com/Efs-O/LlamaBridge) `bridge.yaml` |
+| [Forge](https://github.com/Efs-O/Forge) (VS Code, local llama.cpp) | Supported |
 | Cursor Agents | Supported |
 
-> **Continue / local LLM note:** HalluMeter reads the context window size from `contextLength` in `~/.continue/config.yaml`. If `contextLength` is not set for the active model, that session will not appear — set it for every model you want monitored. Token fill is a best-effort estimate correlated from Continue's local telemetry files. Hallucination risk scores for local open-source models (Llama, Qwen, Gemma, Mistral, etc.) use a **generic fallback curve** — see [RESEARCH.md](RESEARCH.md) for why accuracy is lower than for Claude Code or Codex.
+> **Continue / local LLM note:** HalluMeter reads the context window size from `contextLength` in `~/.continue/config.yaml`. If `contextLength` is not set for the active model, that session will not appear — set it for every model you want monitored. If you use [LlamaBridge](https://github.com/Efs-O/LlamaBridge), HalluMeter can read context sizes directly from your `bridge.yaml` (`num_ctx` per model) — set the `continue_bridge_yaml` path in [SETTINGS.md](SETTINGS.md). Token fill is a best-effort estimate correlated from Continue's local telemetry files. Hallucination risk scores for local open-source models (Llama, Qwen, Gemma, Mistral, etc.) use a **generic fallback curve** — see [RESEARCH.md](RESEARCH.md) for why accuracy is lower than for Claude Code or Codex.
 
 ---
 

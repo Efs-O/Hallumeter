@@ -26,7 +26,7 @@ fn continue_returns_none_without_context_length() {
         },
     );
 
-    assert!(read_continue_usage_from_root(&root, 1800, 120_000).is_none());
+    assert!(read_continue_usage_from_root(&root, 1800, 120_000, None).is_none());
     remove_dir_if_exists(&root);
 }
 
@@ -50,8 +50,8 @@ fn continue_end_to_end_reader_returns_expected_tuple() {
         },
     );
 
-    let usage =
-        read_continue_usage_from_root(&root, 1800, 120_000).expect("continue usage should resolve");
+    let usage = read_continue_usage_from_root(&root, 1800, 120_000, None)
+        .expect("continue usage should resolve");
     assert_eq!(usage.0, "qwen35-9b-long");
     assert!((usage.1 - 12.5).abs() < f64::EPSILON);
     assert_eq!(usage.2, "Continue Qwen Session");
@@ -79,7 +79,7 @@ fn continue_end_to_end_reader_returns_none_on_untrusted_match() {
         },
     );
 
-    assert!(read_continue_usage_from_root(&root, 1800, 120_000).is_none());
+    assert!(read_continue_usage_from_root(&root, 1800, 120_000, None).is_none());
     remove_dir_if_exists(&root);
 }
 
@@ -103,8 +103,8 @@ fn continue_end_to_end_qwen_long_context_fixture_returns_expected_tuple() {
         },
     );
 
-    let usage =
-        read_continue_usage_from_root(&root, 1800, 120_000).expect("qwen fixture should resolve");
+    let usage = read_continue_usage_from_root(&root, 1800, 120_000, None)
+        .expect("qwen fixture should resolve");
     assert_eq!(usage.0, "qwen35-9b-long");
     assert!((usage.1 - 12.5).abs() < f64::EPSILON);
     assert_eq!(usage.2, "Qwen Long Context Session");
@@ -132,8 +132,8 @@ fn continue_end_to_end_gemma4_fixture_returns_expected_tuple() {
         },
     );
 
-    let usage =
-        read_continue_usage_from_root(&root, 1800, 120_000).expect("gemma fixture should resolve");
+    let usage = read_continue_usage_from_root(&root, 1800, 120_000, None)
+        .expect("gemma fixture should resolve");
     assert_eq!(usage.0, "gemma4:26b-it-q4_k_m");
     assert!((usage.1 - 25.0).abs() < f64::EPSILON);
     assert_eq!(usage.2, "Gemma GGUF Session");
@@ -161,7 +161,7 @@ fn continue_end_to_end_gemma4_display_name_chat_matches_slug_token() {
         },
     );
 
-    let usage = read_continue_usage_from_root(&root, 1800, 120_000)
+    let usage = read_continue_usage_from_root(&root, 1800, 120_000, None)
         .expect("gemma display-name fixture should resolve");
     assert_eq!(usage.0, "gemma4-26b-a4b-it-q3km");
     assert!((usage.1 - 37.346875).abs() < 1e-9);

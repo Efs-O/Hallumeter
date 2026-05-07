@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use super::continue_bridge_yaml::bridge_model_config_map_from_path;
 use super::continue_types::{
     continue_normalize_model_id, continue_parse_timestamp_ms, continue_root, ContinueChatEvent,
     ContinueConfigFile, ContinueModelConfig, ContinueSessionMeta, ContinueSessionsFileEntry,
@@ -110,6 +111,23 @@ fn continue_model_config_map_from_path(path: &Path) -> HashMap<String, ContinueM
 
 fn continue_model_config_map(root: &Path) -> HashMap<String, ContinueModelConfig> {
     continue_model_config_map_from_path(&root.join("config.yaml"))
+}
+
+/// Prefer a llamabridge `bridge.yaml` when the path exists and contains models; otherwise
+/// fall back to `~/.continue/config.yaml`.
+fn resolved_model_map(
+    continue_root: &Path,
+    bridge_yaml: Option<&Path>,
+) -> HashMap<String, ContinueModelConfig> {
+    if let Some(p) = bridge_yaml {
+        if p.is_file() {
+            let from_bridge = bridge_model_config_map_from_path(p);
+            if !from_bridge.is_empty() {
+                return from_bridge;
+            }
+        }
+    }
+    continue_model_config_map(continue_root)
 }
 
 pub(crate) fn continue_parse_chat_event(line: &str) -> Option<ContinueChatEvent> {
@@ -241,6 +259,7 @@ pub(crate) fn read_continue_usage_from_root(
     root: &Path,
     activity_secs: u64,
     correlation_ms: i64,
+    bridge_yaml: Option<&Path>,
 ) -> Option<(String, f64, String, u64, i64)> {
     let chat_path = root
         .join("dev_data")
@@ -253,7 +272,7 @@ pub(crate) fn read_continue_usage_from_root(
     let cutoff_ms = recent_cutoff_ms(activity_secs as i64);
 
     let session_index = continue_sessions_index(root);
-    let model_map = continue_model_config_map(root);
+    let model_map = resolved_model_map(root, bridge_yaml);
     if model_map.is_empty() {
         return None;
     }
@@ -292,7 +311,8 @@ pub(crate) fn read_continue_usage_from_root(
 pub fn read_continue_usage(
     activity_secs: u64,
     correlation_ms: i64,
+    bridge_yaml: Option<std::path::PathBuf>,
 ) -> Option<(String, f64, String, u64, i64)> {
     let root = continue_root()?;
-    read_continue_usage_from_root(&root, activity_secs, correlation_ms)
+    read_continue_usage_from_root(&root, activity_secs, correlation_ms, bridge_yaml.as_deref())
 }

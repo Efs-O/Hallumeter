@@ -24,6 +24,7 @@ If the file does not exist, HalluMeter uses the defaults shown below. You can cr
   "stale_timeout_secs": 30,
   "claude_max_files": 6,
   "codex_max_files": 10,
+  "forge_max_files": 10,
   "continue_correlation_secs": 120,
   "amber_threshold": 0.20,
   "red_threshold": 0.38
@@ -69,6 +70,16 @@ Maximum number of Codex session files considered per poll cycle. Same logic as `
 
 ---
 
+### `forge_max_files` — default `10`
+
+Maximum number of Forge AI (Copilot CLI) sessions considered per poll cycle.
+
+Forge uses the GitHub Copilot CLI and persists sessions under your Copilot directory (normally `~/.copilot/session-state/` on Unix, `%USERPROFILE%\.copilot\session-state` on Windows). If you use a custom CLI home, HalluMeter also respects `COPILOT_HOME` ([Copilot CLI config](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)).
+
+HalluMeter reads `events.jsonl` in each session folder and derives fill from `session.usage_info` lines when present, or falls back to `session.shutdown`.
+
+---
+
 ### `continue_correlation_secs` — default `120`
 
 Maximum time gap (in seconds) between a Continue chat event and its matching token count event for them to be considered the same turn.
@@ -77,6 +88,17 @@ Continue stores chat interactions and token counts in separate files. HalluMeter
 
 - Raise this if your local LLM is slow to respond and HalluMeter frequently misses readings.
 - Lower this if you run multiple models and are seeing cross-session false matches.
+
+---
+
+### `continue_bridge_yaml` — default omitted (`null`)
+
+Optional absolute path to a llamabridge `bridge.yaml` (the file with `models:` and per-model `num_ctx`). When that file exists and lists at least one model, HalluMeter uses those context sizes for **Continue** fill % instead of reading `contextLength` from `~/.continue/config.yaml`.
+
+If you do not set this field, HalluMeter also looks for a file at  
+`Desktop/llamabridge/config/bridge.yaml` under your user account (`%USERPROFILE%` on Windows, `HOME` on macOS/Linux) and uses it when present — so a default Desktop `llamabridge` clone can work without editing JSON.
+
+You still need a valid `~/.continue/…` **session JSONL** for activity; this only supplies **model / context** metadata for the meter.
 
 ---
 
@@ -125,6 +147,16 @@ Fields not listed here stay at their defaults.
   "continue_correlation_secs": 300
 }
 ```
+
+## Example: llamabridge `bridge.yaml` for context sizes
+
+```json
+{
+  "continue_bridge_yaml": "C:\\\\Users\\\\YourName\\\\Desktop\\\\llamabridge\\\\config\\\\bridge.yaml"
+}
+```
+
+(Omit this if the file is already at `Desktop/llamabridge/config/bridge.yaml` and you rely on autodetection.)
 
 ---
 
