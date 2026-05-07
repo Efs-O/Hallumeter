@@ -50,6 +50,18 @@ Download the latest release for your platform from the [Releases page](https://g
 
 > No installer needed on Windows — just run the `.exe`.
 
+### First launch — security warnings
+
+HalluMeter is not yet code-signed. Your OS will warn you on first run:
+
+**Windows** — SmartScreen may show *"Windows protected your PC"*.
+Click **More info → Run anyway** to proceed.
+
+**macOS** — Gatekeeper may show *"can't be opened because it is from an unidentified developer"*.
+Open **System Settings → Privacy & Security** and click **Open Anyway**.
+
+These warnings appear because the app does not yet have a paid code-signing certificate. HalluMeter is fully open-source — you can review the code before running it.
+
 ---
 
 ## Build from source
