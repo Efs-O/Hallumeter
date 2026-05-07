@@ -1,0 +1,85 @@
+{
+  "version": "2",
+  "last_updated": "2026-04-13",
+  "reasoning_assumption": "medium",
+  "notes": "Claude curves eased 13/04/2026 based on 2026 benchmark data (AA-Omniscience, Vectara Enterprise, BullshitBench v2). Baseline knot added at fill=5% for Sonnet and Opus — Claude Code reserves ~8-12K tokens on session start for system prompt, memory, tools, and auto-compact headroom; GPT and local models start near true zero so no baseline knot. GPT and Gemini curves are community estimates — context window ambiguity unresolved. See RESEARCH_CURVES.md and RESEARCH.md for full sourcing notes.",
+  "models": [
+    {
+      "id": "claude-sonnet-4-6",
+      "display_name": "Claude Sonnet 4.6",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Eased 13/04/2026: RIKER anchor 50K=0.10 / 128K=0.24 / 200K=0.45. Baseline knot fill=5% added — Claude Code overhead. Original RIKER values (0.14/0.31/0.58) deemed too aggressive vs AA-Omniscience (~38% flat), Vectara Enterprise (10.6%), BullshitBench v2 (3%).",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.03 },
+        { "fill_pct": 25,  "risk_score": 0.10 },
+        { "fill_pct": 40,  "risk_score": 0.16 },
+        { "fill_pct": 64,  "risk_score": 0.24 },
+        { "fill_pct": 85,  "risk_score": 0.37 },
+        { "fill_pct": 100, "risk_score": 0.45 }
+      ]
+    },
+    {
+      "id": "claude-opus-4-6",
+      "display_name": "Claude Opus 4.6",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Eased 13/04/2026: low-fill anchor 0.08→0.06. Peak 0.34 retained — confirmed by AA-Omniscience (best calibration of all models tested). Baseline knot fill=5% added — Claude Code overhead. RIKER anchor 50K=0.06 / 128K=0.15 / 200K=0.34.",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.02 },
+        { "fill_pct": 25,  "risk_score": 0.06 },
+        { "fill_pct": 40,  "risk_score": 0.10 },
+        { "fill_pct": 64,  "risk_score": 0.15 },
+        { "fill_pct": 85,  "risk_score": 0.25 },
+        { "fill_pct": 100, "risk_score": 0.34 }
+      ]
+    },
+    {
+      "id": "gpt-5-4",
+      "display_name": "GPT-5.4",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "community estimate — context window ambiguity unresolved, see RESEARCH_CURVES.md",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 25,  "risk_score": 0.11 },
+        { "fill_pct": 40,  "risk_score": 0.18 },
+        { "fill_pct": 64,  "risk_score": 0.24 },
+        { "fill_pct": 85,  "risk_score": 0.36 },
+        { "fill_pct": 100, "risk_score": 0.42 }
+      ]
+    },
+    {
+      "id": "gpt-5-4-mini",
+      "display_name": "GPT-5.4 Mini",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "community estimate",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 25,  "risk_score": 0.15 },
+        { "fill_pct": 40,  "risk_score": 0.24 },
+        { "fill_pct": 64,  "risk_score": 0.35 },
+        { "fill_pct": 85,  "risk_score": 0.52 },
+        { "fill_pct": 100, "risk_score": 0.60 }
+      ]
+    },
+    {
+      "id": "gemini-3-1-pro",
+      "display_name": "Gemini 3.1 Pro",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "community estimate — RIKER-methodology, 50K=0.18 / 128K=0.38 / 200K=0.62",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 25,  "risk_score": 0.18 },
+        { "fill_pct": 40,  "risk_score": 0.27 },
+        { "fill_pct": 64,  "risk_score": 0.38 },
+        { "fill_pct": 85,  "risk_score": 0.54 },
+        { "fill_pct": 100, "risk_score": 0.62 }
+      ]
+    }
+  ]
+}

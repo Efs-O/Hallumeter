@@ -1,0 +1,17 @@
+dist/
+src-tauri/target/
+node_modules/
+.env
+*.local
+
+# Private / internal — do not publish
+.claude/
+_drafts/
+new voices/
+/*.mp3
+HALGUARD_*.md
+HALLUSCRIBE_*.md
+HALLUCINATION_METRICS_REPORT.md
+CONTINUE_READER_*.md
+hallumeter.jpg
+ScreenShot018.jpg

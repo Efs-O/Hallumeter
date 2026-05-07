@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+
+# Ensure Rust toolchain is on PATH (Windows git-bash does not source profile)
+export PATH="$USERPROFILE/.cargo/bin:$HOME/.cargo/bin:$PATH"
+
+echo "Running quality gates..."
+
+echo "[1/4] cargo fmt"
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+if [ $? -ne 0 ]; then
+  echo "FAIL: cargo fmt — run 'cargo fmt --manifest-path src-tauri/Cargo.toml' to fix"
+  exit 1
+fi
+
+echo "[2/4] cargo clippy"
+cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+if [ $? -ne 0 ]; then
+  echo "FAIL: cargo clippy — fix warnings above"
+  exit 1
+fi
+
+echo "[3/4] cargo test"
+cargo test --manifest-path src-tauri/Cargo.toml
+if [ $? -ne 0 ]; then
+  echo "FAIL: cargo test — fix failing tests"
+  exit 1
+fi
+
+echo "[4/4] vitest"
+npx vitest run
+if [ $? -ne 0 ]; then
+  echo "FAIL: vitest — fix failing frontend tests"
+  exit 1
+fi
+
+echo "All quality gates passed."
