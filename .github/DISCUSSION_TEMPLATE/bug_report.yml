@@ -1,0 +1,89 @@
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you give, the faster we can fix it.
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: Which AI source is affected?
+      options:
+        - Claude Code
+        - Forge VS Code extension
+        - Codex CLI
+        - Continue
+        - GitHub Copilot CLI
+        - All sources / not source-specific
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. Windows 11, macOS 14, Ubuntu 24"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: HalluMeter version
+      placeholder: "e.g. 0.1.0 — shown in the tray tooltip"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What is the ring doing?
+      options:
+        - Stuck on grey (stale/unavailable)
+        - Wrong color for my actual context fill
+        - No audio when it should play
+        - Audio plays when it shouldn't
+        - Ring not updating (frozen)
+        - App crashes or won't start
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "The ring should turn amber when my context is ~50% full"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      placeholder: "The ring stayed grey even though I was actively using Claude Code"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open VS Code with Forge extension
+        2. Send a message to the model
+        3. Wait 10 seconds
+        4. Ring stays grey
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else? (model name, context size, config changes)
+      placeholder: "Running gemma4:26b with 98304 ctx, changed port to 8085"
+    validations:
+      required: false

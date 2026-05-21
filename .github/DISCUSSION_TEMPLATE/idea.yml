@@ -1,0 +1,47 @@
+title: "[Idea] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea to make HalluMeter better? We'd love to hear it.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does your idea relate to?
+      options:
+        - New AI source support (e.g. new tool/extension)
+        - Risk curves / hallucination model accuracy
+        - UI / ring indicator
+        - Audio / alerts
+        - Settings / configuration
+        - HalluScribe integration
+        - Performance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      placeholder: "When I switch between Forge and Claude Code, the ring takes too long to catch up..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to see?
+      placeholder: "A way to manually pin the active source so the ring follows it immediately..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Any alternatives you've considered?
+      placeholder: "I tried changing activity_window_mins in settings but it affects all sources..."
+    validations:
+      required: false

@@ -1,0 +1,46 @@
+title: "[Q] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask anything about setting up or using HalluMeter. Check the README and existing discussions first — your question may already be answered.
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: What is your question about?
+      options:
+        - Installation / first run
+        - Source setup (Claude Code / Forge / Codex / Continue / Copilot)
+        - Settings and configuration
+        - Risk curves and thresholds
+        - Audio behavior
+        - HalluScribe integration
+        - Building from source
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. Windows 11, macOS 14, Ubuntu 24"
+    validations:
+      required: false
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      placeholder: "How do I get HalluMeter to detect my Forge sessions? The ring stays grey..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you already tried?
+      placeholder: "I checked ~/.forge/hallumeter-bridge.json and it doesn't exist yet..."
+    validations:
+      required: false
