@@ -272,7 +272,7 @@ pub fn run() {
                 use crate::settings::resolve_continue_bridge_yaml_path;
                 use crate::sources::{
                     read_claude_jsonl_usage, read_codex_jsonl_usage, read_continue_usage,
-                    read_forge_usage,
+                    read_copilot_usage, read_forge_usage,
                 };
 
                 let activity_secs = cfg.activity_window_mins * 60;
@@ -294,7 +294,8 @@ pub fn run() {
                     let mut candidates: Vec<(String, f64, String, u64, i64, f64)> = [
                         read_claude_jsonl_usage(activity_secs, cfg.claude_max_files),
                         read_codex_jsonl_usage(activity_secs, cfg.codex_max_files),
-                        read_forge_usage(activity_secs, cfg.forge_max_files),
+                        read_forge_usage(activity_secs),
+                        read_copilot_usage(activity_secs, cfg.copilot_max_files),
                         read_continue_usage(
                             activity_secs,
                             correlation_ms,

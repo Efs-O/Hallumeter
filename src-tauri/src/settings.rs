@@ -41,8 +41,8 @@ pub struct UserSettings {
     pub claude_max_files: usize,
     /// Max number of Codex session files considered per poll cycle.
     pub codex_max_files: usize,
-    /// Max number of Forge / Copilot CLI session dirs considered per poll cycle.
-    pub forge_max_files: usize,
+    /// Max number of GitHub Copilot CLI session dirs considered per poll cycle.
+    pub copilot_max_files: usize,
     /// Max time gap between a Continue chat event and its matching token event (seconds).
     pub continue_correlation_secs: u64,
     /// Optional path to a llamabridge `bridge.yaml` (or compatible `models: … num_ctx:`).
@@ -72,7 +72,7 @@ impl Default for UserSettings {
             stale_timeout_secs: 30,
             claude_max_files: 6,
             codex_max_files: 10,
-            forge_max_files: 10,
+            copilot_max_files: 10,
             continue_correlation_secs: 120,
             continue_bridge_yaml: None,
             amber_threshold: AMBER_THRESHOLD,

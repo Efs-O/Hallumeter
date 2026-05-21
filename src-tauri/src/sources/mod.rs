@@ -11,12 +11,14 @@ mod codex;
 mod continue_bridge_yaml;
 mod continue_reader;
 mod continue_types;
+mod copilot;
 mod forge;
 
 // Public API used by lib.rs
 pub use claude::read_claude_jsonl_usage;
 pub use codex::read_codex_jsonl_usage;
 pub use continue_reader::read_continue_usage;
+pub use copilot::read_copilot_usage;
 pub use forge::read_forge_usage;
 
 // Items used by tests.rs (cfg(test) gate suppresses unused-import warnings in non-test builds)
