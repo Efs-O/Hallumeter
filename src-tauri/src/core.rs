@@ -2,6 +2,7 @@
 // Pure logic functions — shell parsing, curve interpolation, state mapping.
 
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 // Absolute risk score thresholds — model-agnostic, applied to the interpolated risk_score
 // emitted by the curve for whichever model is active. Curves do the per-model heavy lifting
@@ -47,8 +48,13 @@ pub struct CurvesConfig {
 // Embedded at compile time — single source of truth
 static CURVES_JSON: &str = include_str!("../assets/curves.json");
 
-pub fn load_curves() -> CurvesConfig {
-    serde_json::from_str(CURVES_JSON).expect("curves.json is malformed")
+// Parsed once on first use, then reused for the process lifetime. The data is
+// immutable (compile-time embedded), so re-parsing it on every poll/JSONL line
+// is pure waste in an always-on background app.
+static CURVES: OnceLock<CurvesConfig> = OnceLock::new();
+
+pub fn load_curves() -> &'static CurvesConfig {
+    CURVES.get_or_init(|| serde_json::from_str(CURVES_JSON).expect("curves.json is malformed"))
 }
 
 // --- Implementations ---

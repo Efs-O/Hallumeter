@@ -339,11 +339,14 @@ pub fn run() {
                         }
                         prev_session = session.clone();
 
-                        // Panic Easter egg — plays once when context hits 95%.
+                        // Panic Easter egg — fires once when context hits 95%.
+                        // Audio + visuals are owned entirely by the frontend
+                        // (`play_panic_audio`, which emits `panic-audio-done` for the
+                        // cut-to-black sync). The backend only tracks the one-shot so it
+                        // can suppress the normal state-change cue below and avoid overlap.
                         let panic_firing = fill_pct >= 95.0 && !panic_played;
                         if panic_firing {
                             panic_played = true;
-                            player.play_panic(&resource_dir);
                         }
 
                         // Keep shared state in sync for window-focus re-application.

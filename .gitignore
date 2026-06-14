@@ -6,8 +6,11 @@ node_modules/
 
 # Private / internal — do not publish
 .claude/
+.coordination/
 _drafts/
 new voices/
+/New folder/
+/hallumeter sounds/
 /*.mp3
 HALGUARD_*.md
 HALLUSCRIBE_*.md

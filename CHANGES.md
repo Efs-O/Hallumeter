@@ -1,5 +1,20 @@
 # HalluMeter — Recent Changes
 
+## 0.1.4 — Audit fixes
+
+Fixes from a full-repo audit (see `AUDIT_REPORT.md`):
+
+- **Panic Easter egg no longer plays `panic.mp3` twice.** The backend poll loop and the
+  frontend both fired panic audio at ≥95 % fill, causing overlapping playback. Audio + the
+  cut-to-black visual are now owned solely by the frontend (`play_panic_audio`); the backend
+  only tracks the one-shot to suppress the normal state cue. (`lib.rs`, `audio.rs`)
+- **`curves.json` is parsed once and cached** (`OnceLock`) instead of re-deserializing on every
+  poll cycle and every Claude JSONL line — a pure CPU/allocation win for an always-on app. (`core.rs`)
+- **`.gitignore` hardened** against accidentally committing the stray `New folder/`,
+  `hallumeter sounds/`, and `.coordination/` working directories.
+
+---
+
 ## Source Architecture Refactor: Forge → real Forge + Copilot CLI separated
 
 ### Background

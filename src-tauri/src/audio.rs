@@ -56,20 +56,6 @@ impl AudioPlayer {
         ((self.seed >> 33) % 7 + 8) as u8
     }
 
-    /// Spawn a detached thread that plays `panic.mp3`. No-op when muted.
-    pub fn play_panic(&self, resource_dir: &Path) {
-        if self.muted.load(Ordering::Relaxed) {
-            return;
-        }
-        let path = resource_dir.join("assets").join("audio").join("panic.mp3");
-        let muted = self.muted.clone();
-        std::thread::spawn(move || {
-            if let Err(e) = play_mp3_blocking(&path, muted) {
-                eprintln!("[audio] panic playback error: {e}");
-            }
-        });
-    }
-
     /// Spawn a detached thread that plays `<state>_<variant>.mp3`.
     /// No-op when muted or state is stale/unavailable.
     /// If muted mid-playback, the sink is stopped immediately.
