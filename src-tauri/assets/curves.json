@@ -1,6 +1,6 @@
 {
-  "version": "2",
-  "last_updated": "2026-04-13",
+  "version": "3",
+  "last_updated": "2026-07-19",
   "reasoning_assumption": "medium",
   "notes": "Claude curves eased 13/04/2026 based on 2026 benchmark data (AA-Omniscience, Vectara Enterprise, BullshitBench v2). Baseline knot added at fill=5% for Sonnet and Opus — Claude Code reserves ~8-12K tokens on session start for system prompt, memory, tools, and auto-compact headroom; GPT and local models start near true zero so no baseline knot. GPT and Gemini curves are community estimates — context window ambiguity unresolved. See RESEARCH_CURVES.md and RESEARCH.md for full sourcing notes.",
   "models": [
@@ -34,6 +34,70 @@
         { "fill_pct": 64,  "risk_score": 0.15 },
         { "fill_pct": 85,  "risk_score": 0.25 },
         { "fill_pct": 100, "risk_score": 0.34 }
+      ]
+    },
+    {
+      "id": "claude-sonnet-5",
+      "display_name": "Claude Sonnet 5",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Cloned from claude-sonnet-4-6 on 19/07/2026 pending benchmark data. Baseline knot fill=5% — Claude Code overhead.",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.03 },
+        { "fill_pct": 25,  "risk_score": 0.10 },
+        { "fill_pct": 40,  "risk_score": 0.16 },
+        { "fill_pct": 64,  "risk_score": 0.24 },
+        { "fill_pct": 85,  "risk_score": 0.37 },
+        { "fill_pct": 100, "risk_score": 0.45 }
+      ]
+    },
+    {
+      "id": "claude-opus-4-8",
+      "display_name": "Claude Opus 4.8",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Cloned from claude-opus-4-6 on 19/07/2026 pending benchmark data. Baseline knot fill=5% — Claude Code overhead.",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.02 },
+        { "fill_pct": 25,  "risk_score": 0.06 },
+        { "fill_pct": 40,  "risk_score": 0.10 },
+        { "fill_pct": 64,  "risk_score": 0.15 },
+        { "fill_pct": 85,  "risk_score": 0.25 },
+        { "fill_pct": 100, "risk_score": 0.34 }
+      ]
+    },
+    {
+      "id": "claude-fable-5",
+      "display_name": "Claude Fable 5",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Cloned from claude-opus-4-6 on 19/07/2026 — Mythos-class tier sits above Opus, the Opus curve is the closest measured anchor. Pending benchmark data. Baseline knot fill=5% — Claude Code overhead.",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.02 },
+        { "fill_pct": 25,  "risk_score": 0.06 },
+        { "fill_pct": 40,  "risk_score": 0.10 },
+        { "fill_pct": 64,  "risk_score": 0.15 },
+        { "fill_pct": 85,  "risk_score": 0.25 },
+        { "fill_pct": 100, "risk_score": 0.34 }
+      ]
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "display_name": "Claude Haiku 4.5",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Estimated 19/07/2026 between claude-sonnet-4-6 and gpt-5-4-mini — smaller model, earlier degradation. Pending benchmark data. Baseline knot fill=5% — Claude Code overhead.",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.04 },
+        { "fill_pct": 25,  "risk_score": 0.13 },
+        { "fill_pct": 40,  "risk_score": 0.20 },
+        { "fill_pct": 64,  "risk_score": 0.30 },
+        { "fill_pct": 85,  "risk_score": 0.45 },
+        { "fill_pct": 100, "risk_score": 0.53 }
       ]
     },
     {

@@ -1,10 +1,35 @@
 // Claude Code JSONL session reader.
 
-use crate::core::load_curves;
+use crate::core::context_window_for;
 use crate::sources::continue_types::continue_parse_timestamp_ms;
+use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use super::{collect_jsonl, home_dir, recent_cutoff, truncate40};
+
+/// Parsed result for one session file, reused while `(mtime, len)` is unchanged.
+/// Session files are re-scanned every 5 s poll; long sessions grow to tens of MB,
+/// so skipping the read+parse for unchanged files is a real win in an always-on app.
+struct CachedSession {
+    mtime: SystemTime,
+    len: u64,
+    parsed: Option<(String, f64, String, u64, i64)>,
+}
+
+static SESSION_CACHE: Mutex<Option<HashMap<PathBuf, CachedSession>>> = Mutex::new(None);
+
+fn parse_session_file(path: &Path) -> Option<(String, f64, String, u64, i64)> {
+    let content = fs::read_to_string(path).ok()?;
+    let (model, fill_pct, tokens, last_active_ms) = content
+        .lines()
+        .filter_map(parse_claude_usage_line)
+        .next_back()?;
+    let session = claude_session_title(&content).unwrap_or_else(|| "-".to_string());
+    Some((model, fill_pct, session, tokens, last_active_ms))
+}
 
 /// Session title from Claude Code JSONL.
 /// Priority: custom-title → ai-title → raw first user message.
@@ -88,13 +113,7 @@ fn parse_claude_usage_line(line: &str) -> Option<(String, f64, u64, i64)> {
         .and_then(|t| t.as_f64())
         .unwrap_or(0.0);
     let total = input + cache_read + cache_write + output;
-    let curves = load_curves();
-    let context_window = curves
-        .models
-        .iter()
-        .find(|m| m.id == model)
-        .map(|m| m.context_window as f64)
-        .unwrap_or(200_000.0);
+    let context_window = context_window_for(&model).unwrap_or(200_000) as f64;
     // Timestamp from the line itself — more reliable than file mtime.
     let ts_ms = v
         .get("timestamp")
@@ -111,25 +130,47 @@ fn parse_claude_usage_line(line: &str) -> Option<(String, f64, u64, i64)> {
 
 /// Highest-fill active Claude Code session among the `max_files` most recently
 /// modified files, limited to files touched within the last `activity_secs` seconds.
-/// Returns (model, fill_pct, session, tokens, last_active_ms).
+/// Returns (model, fill_pct, session, tokens, last_active_ms, session_id).
+/// `session_id` is the session file path — stable for the file's lifetime, unlike
+/// the display title which upgrades (first-message → ai-title → custom-title).
 pub fn read_claude_jsonl_usage(
     activity_secs: u64,
     max_files: usize,
-) -> Option<(String, f64, String, u64, i64)> {
+) -> Option<(String, f64, String, u64, i64, String)> {
     let projects_dir = home_dir()?.join(".claude").join("projects");
     let cutoff = recent_cutoff(activity_secs);
-    collect_jsonl(&projects_dir)
-        .iter()
+    let recent: Vec<(SystemTime, PathBuf)> = collect_jsonl(&projects_dir)
+        .into_iter()
         .take(max_files)
         .filter(|(mtime, _)| *mtime >= cutoff)
-        .filter_map(|(_, path)| {
-            let content = fs::read_to_string(path).ok()?;
-            let (model, fill_pct, tokens, last_active_ms) = content
-                .lines()
-                .filter_map(parse_claude_usage_line)
-                .next_back()?;
-            let session = claude_session_title(&content).unwrap_or_else(|| "-".to_string());
-            Some((model, fill_pct, session, tokens, last_active_ms))
+        .collect();
+
+    let mut guard = SESSION_CACHE.lock().unwrap();
+    let cache = guard.get_or_insert_with(HashMap::new);
+    // Drop entries for files that left the recent window so the map stays bounded.
+    cache.retain(|path, _| recent.iter().any(|(_, p)| p == path));
+
+    recent
+        .iter()
+        .filter_map(|(mtime, path)| {
+            let len = fs::metadata(path).ok()?.len();
+            let hit = cache
+                .get(path)
+                .is_some_and(|c| c.mtime == *mtime && c.len == len);
+            if !hit {
+                cache.insert(
+                    path.clone(),
+                    CachedSession {
+                        mtime: *mtime,
+                        len,
+                        parsed: parse_session_file(path),
+                    },
+                );
+            }
+            let (model, fill_pct, session, tokens, last_active_ms) =
+                cache.get(path)?.parsed.clone()?;
+            let session_id = path.to_string_lossy().into_owned();
+            Some((model, fill_pct, session, tokens, last_active_ms, session_id))
         })
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 }

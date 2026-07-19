@@ -20,7 +20,8 @@ pub struct ContextPayload {
     pub risk_score: f64,
     pub state: String,
     pub model: String,
-    pub session: String, // project folder name extracted from JSONL path
+    pub session: String, // display title — can upgrade mid-session (ai-title, custom-title)
+    pub session_id: String, // stable identity (file path / session uuid) — one-shot bookkeeping
     pub variant: u8,     // 1–5: which voice line just played; 0: no new line this cycle
     pub tokens: u64,     // raw input token count for the current session
 }
@@ -59,15 +60,45 @@ pub fn load_curves() -> &'static CurvesConfig {
 
 // --- Implementations ---
 
+/// Resolves a model id to its curve: exact match first, then the longest
+/// family-prefix match on a `-` boundary, so date-suffixed ids like
+/// `claude-haiku-4-5-20251001` hit the `claude-haiku-4-5` curve.
+pub fn find_model_curve(model: &str) -> Option<&'static ModelCurve> {
+    let curves = load_curves();
+    curves.models.iter().find(|m| m.id == model).or_else(|| {
+        curves
+            .models
+            .iter()
+            .filter(|m| model.starts_with(&m.id) && model.as_bytes().get(m.id.len()) == Some(&b'-'))
+            .max_by_key(|m| m.id.len())
+    })
+}
+
+/// Context window for a model, honoring family-prefix matching.
+pub fn context_window_for(model: &str) -> Option<u64> {
+    find_model_curve(model).map(|m| m.context_window)
+}
+
+/// Logs each unknown model id once per process, so silent curve fallbacks
+/// are visible when a new model generation ships.
+fn warn_unknown_model(model: &str) {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+    static SEEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+    let mut guard = SEEN.lock().unwrap();
+    let seen = guard.get_or_insert_with(HashSet::new);
+    if seen.insert(model.to_string()) {
+        eprintln!("[curves] unknown model id '{model}' — using fallback curve/context window");
+    }
+}
+
 /// Looks up model in curves.json and interpolates risk score for given fill %.
 /// Falls back to the first model's curve if model not found.
 pub fn interpolate_curve(model: &str, fill_pct: f64) -> f64 {
-    let curves = load_curves();
-    let mc = curves
-        .models
-        .iter()
-        .find(|m| m.id == model)
-        .or_else(|| curves.models.first());
+    let mc = find_model_curve(model).or_else(|| {
+        warn_unknown_model(model);
+        load_curves().models.first()
+    });
     let Some(mc) = mc else {
         return (fill_pct / 100.0).clamp(0.0, 1.0);
     };

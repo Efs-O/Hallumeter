@@ -46,6 +46,40 @@ fn unknown_model_uses_generic_curve() {
 }
 
 #[test]
+fn date_suffixed_model_matches_family_curve() {
+    // Prefix match on a '-' boundary: date-suffixed ids resolve to the family curve,
+    // not the generic first-curve fallback.
+    let haiku = interpolate_curve("claude-haiku-4-5-20251001", 25.0);
+    let haiku_exact = interpolate_curve("claude-haiku-4-5", 25.0);
+    assert!((haiku - haiku_exact).abs() < f64::EPSILON, "got {haiku}");
+
+    let sonnet = interpolate_curve("claude-sonnet-4-6", 25.0);
+    assert!(
+        (haiku - sonnet).abs() > 0.001,
+        "haiku must not fall back to sonnet"
+    );
+}
+
+#[test]
+fn prefix_match_requires_dash_boundary() {
+    // "claude-sonnet-55" must not match "claude-sonnet-5".
+    use crate::core::find_model_curve;
+    assert!(find_model_curve("claude-sonnet-5").is_some());
+    assert!(find_model_curve("claude-sonnet-55").is_none());
+    assert!(find_model_curve("claude-fable-5-20260101").is_some());
+}
+
+#[test]
+fn context_window_honors_prefix_match() {
+    use crate::core::context_window_for;
+    assert_eq!(
+        context_window_for("claude-haiku-4-5-20251001"),
+        Some(200_000)
+    );
+    assert_eq!(context_window_for("totally-unknown"), None);
+}
+
+#[test]
 fn low_risk_is_green() {
     assert_eq!(
         risk_to_state(AMBER_THRESHOLD - 0.01, AMBER_THRESHOLD, RED_THRESHOLD),

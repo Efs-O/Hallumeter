@@ -13,7 +13,8 @@
     risk_score: number;
     state:      string;
     model:      string;
-    session:    string;
+    session:    string;    // display title — can upgrade mid-session
+    session_id: string;    // stable identity — used for the panic one-shot reset
     variant:    number; // 1–5 when a line just played, 0 otherwise
     tokens:     number; // raw input token count for the current session
   }
@@ -56,10 +57,11 @@
   let currentLine  = $state("");
   let showFirstRun = $state(false);
 
-  // Panic Easter egg — triggers once when fillPct hits 99%
+  // Panic Easter egg — triggers once when fillPct hits 95%
   type PanicPhase = "idle" | "strobing" | "blank" | "done";
   let panicPhase    = $state<PanicPhase>("idle");
   let panicFired    = false; // one-shot: resets only when a new session starts
+  let sessionId     = "—";   // stable id from the payload — titles mutate, ids don't
 
   function triggerPanic() {
     if (panicFired) return;
@@ -104,11 +106,13 @@
     let cleanup: (() => void) | undefined;
     invoke<boolean>("check_first_run").then(v => { showFirstRun = v; });
     listen<ContextPayload>("context-update", (e) => {
-      // Reset one-shot flag when a new session is detected
-      if (e.payload.session !== session && session !== "—") {
+      // Reset one-shot flag when a new session is detected — keyed on the stable
+      // session_id, not the title, which upgrades mid-session (ai/custom title).
+      if (e.payload.session_id !== sessionId && sessionId !== "—") {
         panicFired = false;
         if (panicPhase !== "idle") panicPhase = "idle";
       }
+      sessionId = e.payload.session_id;
 
       fillPct   = e.payload.fill_pct;
       riskScore = e.payload.risk_score;

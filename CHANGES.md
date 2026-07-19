@@ -1,5 +1,26 @@
 # HalluMeter — Recent Changes
 
+## 0.1.5 — Curve refresh + audit round 2
+
+Fixes from the follow-up audit (see `AUDIT_REPORT_0.1.4.md` / `IMPLEMENTATION_PLAN_0.1.5.md`):
+
+- **curves.json knows the Claude 5 generation.** Added `claude-sonnet-5`, `claude-opus-4-8`,
+  `claude-fable-5`, and `claude-haiku-4-5` (curves cloned from the nearest measured family
+  pending benchmark data). New family-prefix matching means date-suffixed ids like
+  `claude-haiku-4-5-20251001` resolve to their family curve instead of the generic fallback,
+  and unknown model ids are now logged once instead of failing silently. (`core.rs`, `curves.json`)
+- **Real WiX `upgradeCode` GUID** replaces the tutorial placeholder. ⚠️ MSI installs of
+  ≤0.1.4 will not auto-upgrade — uninstall once, then install 0.1.5.
+- **Panic Easter egg can no longer re-fire mid-session.** The one-shot now keys on a stable
+  `session_id` (file path / session uuid) carried through every reader and the payload; the
+  display title still upgrades (first-message → ai-title → custom-title) without side effects.
+- **Claude session files are cached per `(mtime, len)`** — unchanged files skip the full
+  read + double JSON parse every 5 s poll. (`claude.rs`)
+- Doc drift: panic-threshold comment (99 % → 95 %), `sources/mod.rs` header now lists all
+  five sources correctly.
+
+---
+
 ## 0.1.4 — Audit fixes
 
 Fixes from a full-repo audit (see `AUDIT_REPORT.md`):

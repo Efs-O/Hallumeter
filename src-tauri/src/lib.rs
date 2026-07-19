@@ -291,7 +291,8 @@ pub fn run() {
 
                 loop {
                     // Collect all active sources, annotate with risk_score.
-                    let mut candidates: Vec<(String, f64, String, u64, i64, f64)> = [
+                    // (model, fill_pct, session, tokens, last_active_ms, session_id, risk_score)
+                    let mut candidates: Vec<(String, f64, String, u64, i64, String, f64)> = [
                         read_claude_jsonl_usage(activity_secs, cfg.claude_max_files),
                         read_codex_jsonl_usage(activity_secs, cfg.codex_max_files),
                         read_forge_usage(activity_secs),
@@ -304,11 +305,21 @@ pub fn run() {
                     ]
                     .into_iter()
                     .flatten()
-                    .map(|(model, fill_pct, session, tokens, last_active_ms)| {
-                        let adjusted = (fill_pct + cfg.context_overhead_pct).clamp(0.0, 100.0);
-                        let risk_score = interpolate_curve(&model, adjusted);
-                        (model, adjusted, session, tokens, last_active_ms, risk_score)
-                    })
+                    .map(
+                        |(model, fill_pct, session, tokens, last_active_ms, session_id)| {
+                            let adjusted = (fill_pct + cfg.context_overhead_pct).clamp(0.0, 100.0);
+                            let risk_score = interpolate_curve(&model, adjusted);
+                            (
+                                model,
+                                adjusted,
+                                session,
+                                tokens,
+                                last_active_ms,
+                                session_id,
+                                risk_score,
+                            )
+                        },
+                    )
                     .collect();
 
                     // Select most recently active source.
@@ -316,28 +327,30 @@ pub fn run() {
                     candidates.sort_by(|a, b| {
                         let time_diff = (a.4 - b.4).abs();
                         if time_diff <= 60_000 {
-                            b.5.partial_cmp(&a.5).unwrap_or(std::cmp::Ordering::Equal)
+                            b.6.partial_cmp(&a.6).unwrap_or(std::cmp::Ordering::Equal)
                         } else {
                             b.4.cmp(&a.4)
                         }
                     });
                     let best = candidates.into_iter().next().map(
-                        |(model, fill_pct, session, tokens, _, risk_score)| {
-                            (model, fill_pct, session, tokens, risk_score)
+                        |(model, fill_pct, session, tokens, _, session_id, risk_score)| {
+                            (model, fill_pct, session, tokens, session_id, risk_score)
                         },
                     );
 
-                    if let Some((model, fill_pct, session, tokens, risk_score)) = best {
+                    if let Some((model, fill_pct, session, tokens, session_id, risk_score)) = best {
                         let state =
                             risk_to_state(risk_score, cfg.amber_threshold, cfg.red_threshold)
                                 .to_string();
                         last_data = Instant::now();
 
                         // Reset panic one-shot when a new session is detected.
-                        if session != prev_session && !prev_session.is_empty() {
+                        // Keyed on the stable session_id — the display title mutates
+                        // (first-message → ai-title → custom-title) and must not reset it.
+                        if session_id != prev_session && !prev_session.is_empty() {
                             panic_played = false;
                         }
-                        prev_session = session.clone();
+                        prev_session = session_id.clone();
 
                         // Panic Easter egg — fires once when context hits 95%.
                         // Audio + visuals are owned entirely by the frontend
@@ -390,6 +403,7 @@ pub fn run() {
                                 state: state.clone(),
                                 model,
                                 session,
+                                session_id,
                                 variant: emit_variant,
                                 tokens,
                             },
@@ -411,6 +425,7 @@ pub fn run() {
                                 state: "stale".to_string(),
                                 model: "—".to_string(),
                                 session: "—".to_string(),
+                                session_id: "—".to_string(),
                                 variant: 0,
                                 tokens: 0,
                             },

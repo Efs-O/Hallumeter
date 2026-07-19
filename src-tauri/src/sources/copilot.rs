@@ -1,7 +1,7 @@
 // GitHub Copilot CLI — reads session events from ~/.copilot/session-state/.
 // Optional: COPILOT_HOME env overrides ~/.copilot.
 
-use crate::core::load_curves;
+use crate::core::context_window_for;
 use serde_json::Value;
 use std::cmp::Reverse;
 use std::fs;
@@ -131,14 +131,8 @@ fn parse_events_jsonl(content: &str) -> Option<(String, f64, u64)> {
             (ct, lim, scan.model.or(scan.shutdown_model)?)
         } else if let Some(ct) = scan.shutdown_tokens {
             let m_raw = scan.shutdown_model.or(scan.model)?;
-            let curves = load_curves();
             let normalized = copilot_normalize_model_id(&m_raw);
-            let lim = curves
-                .models
-                .iter()
-                .find(|m| m.id == normalized)
-                .map(|m| m.context_window)
-                .unwrap_or(128_000);
+            let lim = context_window_for(&normalized).unwrap_or(128_000);
             (ct, lim, m_raw)
         } else {
             return None;
@@ -175,11 +169,11 @@ fn max_timestamp_ms_in_file(content: &str, file_mtime_ms: i64) -> i64 {
 }
 
 /// Active GitHub Copilot CLI sessions under ~/.copilot/session-state.
-/// Returns `(model, fill_pct, session, tokens, last_active_ms)`.
+/// Returns `(model, fill_pct, session, tokens, last_active_ms, session_id)`.
 pub fn read_copilot_usage(
     activity_secs: u64,
     max_files: usize,
-) -> Option<(String, f64, String, u64, i64)> {
+) -> Option<(String, f64, String, u64, i64, String)> {
     let session_state = copilot_session_state_root()?;
     if !session_state.is_dir() {
         return None;
@@ -201,7 +195,8 @@ pub fn read_copilot_usage(
                 .unwrap_or(0);
             let last_active_ms = max_timestamp_ms_in_file(&content, file_mtime_ms);
             let session = session_label(&dir);
-            Some((model, fill_pct, session, tokens, last_active_ms))
+            let session_id = dir.to_string_lossy().into_owned();
+            Some((model, fill_pct, session, tokens, last_active_ms, session_id))
         })
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 }

@@ -130,11 +130,13 @@ fn parse_codex_session(
 
 /// Highest-fill active Codex session among the `max_files` most recently modified
 /// files, limited to files touched within the last `activity_secs` seconds.
-/// Returns (model, fill_pct, session, tokens, last_active_ms).
+/// Returns (model, fill_pct, session, tokens, last_active_ms, session_id).
+/// `session_id` is the session file path — stable, unlike the display title
+/// which can upgrade once the session_index thread_name appears.
 pub fn read_codex_jsonl_usage(
     activity_secs: u64,
     max_files: usize,
-) -> Option<(String, f64, String, u64, i64)> {
+) -> Option<(String, f64, String, u64, i64, String)> {
     let sessions_dir = home_dir()?.join(".codex").join("sessions");
     let cutoff = recent_cutoff(activity_secs);
     let index = codex_session_index();
@@ -150,7 +152,8 @@ pub fn read_codex_jsonl_usage(
                 .ok()
                 .map(|d| d.as_millis() as i64)
                 .unwrap_or(0);
-            Some((model, fill_pct, session, tokens, last_active_ms))
+            let session_id = path.to_string_lossy().into_owned();
+            Some((model, fill_pct, session, tokens, last_active_ms, session_id))
         })
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 }

@@ -1,6 +1,6 @@
 {
   "productName": "HalluMeter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "identifier": "dev.hallumeter.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -48,7 +48,7 @@
     ],
     "windows": {
       "wix": {
-        "upgradeCode": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+        "upgradeCode": "574C03F9-CE7B-4772-89F4-745B0AD699F9"
       }
     }
   }

@@ -23,8 +23,8 @@ fn forge_bridge_path() -> Option<std::path::PathBuf> {
 }
 
 /// Active Forge VS Code extension session from ~/.forge/hallumeter-bridge.json.
-/// Returns `(model, fill_pct, session, tokens, last_active_ms)`.
-pub fn read_forge_usage(activity_secs: u64) -> Option<(String, f64, String, u64, i64)> {
+/// Returns `(model, fill_pct, session, tokens, last_active_ms, session_id)`.
+pub fn read_forge_usage(activity_secs: u64) -> Option<(String, f64, String, u64, i64, String)> {
     let path = forge_bridge_path()?;
     let content = std::fs::read_to_string(&path).ok()?;
     let bridge: ForgeBridge = serde_json::from_str(&content).ok()?;
@@ -51,12 +51,15 @@ pub fn read_forge_usage(activity_secs: u64) -> Option<(String, f64, String, u64,
 
     let fill = (bridge.used_tokens as f64 / bridge.max_tokens as f64 * 100.0).clamp(0.0, 100.0);
     let session = format!("Forge · {}", bridge.model);
+    // Single bridge file — the model id is the most stable identity available.
+    let session_id = format!("forge:{}", bridge.model);
     Some((
         bridge.model,
         fill,
         session,
         bridge.used_tokens,
         bridge.timestamp_ms,
+        session_id,
     ))
 }
 

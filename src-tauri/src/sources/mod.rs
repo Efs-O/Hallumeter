@@ -1,5 +1,6 @@
-// JSONL session readers for Claude Code, Codex, Forge (Copilot CLI), and Continue.
-// Each returns (model_id, fill_pct, session_title, tokens, last_active_ms) or None.
+// Session readers for the five sources: Claude Code, Codex, Forge (VS Code bridge),
+// GitHub Copilot CLI, and Continue.
+// Each returns (model_id, fill_pct, session_title, tokens, last_active_ms, session_id) or None.
 
 use std::cmp::Reverse;
 use std::fs;
