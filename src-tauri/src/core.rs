@@ -24,6 +24,8 @@ pub struct ContextPayload {
     pub session_id: String, // stable identity (file path / session uuid) — one-shot bookkeeping
     pub variant: u8,     // 1–5: which voice line just played; 0: no new line this cycle
     pub tokens: u64,     // raw input token count for the current session
+    /// A user-visible explanation for unavailable/degraded monitoring.
+    pub diagnostic: Option<String>,
 }
 
 // --- Curve data structures ---
@@ -79,49 +81,30 @@ pub fn context_window_for(model: &str) -> Option<u64> {
     find_model_curve(model).map(|m| m.context_window)
 }
 
-/// Logs each unknown model id once per process, so silent curve fallbacks
-/// are visible when a new model generation ships.
-fn warn_unknown_model(model: &str) {
-    use std::collections::HashSet;
-    use std::sync::Mutex;
-    static SEEN: Mutex<Option<HashSet<String>>> = Mutex::new(None);
-    let mut guard = SEEN.lock().unwrap();
-    let seen = guard.get_or_insert_with(HashSet::new);
-    if seen.insert(model.to_string()) {
-        eprintln!("[curves] unknown model id '{model}' — using fallback curve/context window");
-    }
-}
-
 /// Looks up model in curves.json and interpolates risk score for given fill %.
-/// Falls back to the first model's curve if model not found.
-pub fn interpolate_curve(model: &str, fill_pct: f64) -> f64 {
-    let mc = find_model_curve(model).or_else(|| {
-        warn_unknown_model(model);
-        load_curves().models.first()
-    });
-    let Some(mc) = mc else {
-        return (fill_pct / 100.0).clamp(0.0, 1.0);
-    };
+/// Unknown models return `None`; HalluMeter must not report a synthetic risk score.
+pub fn interpolate_curve(model: &str, fill_pct: f64) -> Option<f64> {
+    let mc = find_model_curve(model)?;
     let pts = &mc.degradation_curve;
     if pts.is_empty() {
-        return 0.0;
+        return None;
     }
     if fill_pct <= pts[0].fill_pct {
-        return pts[0].risk_score;
+        return Some(pts[0].risk_score);
     }
     let last = pts.last().unwrap();
     if fill_pct >= last.fill_pct {
-        return last.risk_score;
+        return Some(last.risk_score);
     }
     for i in 1..pts.len() {
         let lo = &pts[i - 1];
         let hi = &pts[i];
         if fill_pct <= hi.fill_pct {
             let t = (fill_pct - lo.fill_pct) / (hi.fill_pct - lo.fill_pct);
-            return lo.risk_score + t * (hi.risk_score - lo.risk_score);
+            return Some(lo.risk_score + t * (hi.risk_score - lo.risk_score));
         }
     }
-    last.risk_score
+    Some(last.risk_score)
 }
 
 /// Maps a risk score to a state string using the provided thresholds.

@@ -4,17 +4,19 @@ use std::collections::HashMap;
 use std::fs;
 use std::time::UNIX_EPOCH;
 
-use super::{collect_jsonl, home_dir, recent_cutoff, truncate40};
+use super::{collect_jsonl, home_dir, recent_cutoff, truncate40, UsageResult};
 
 /// Load ~/.codex/session_index.jsonl and return a map of session-id → thread_name.
-fn codex_session_index() -> HashMap<String, String> {
+fn codex_session_index() -> Result<HashMap<String, String>, String> {
     let mut map = HashMap::new();
     let Some(path) = home_dir().map(|h| h.join(".codex").join("session_index.jsonl")) else {
-        return map;
+        return Ok(map);
     };
-    let Ok(content) = fs::read_to_string(&path) else {
-        return map;
+    if !path.exists() {
+        return Ok(map);
     };
+    let content = fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
     for line in content.lines() {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
@@ -26,7 +28,7 @@ fn codex_session_index() -> HashMap<String, String> {
             map.insert(id.to_string(), name.to_string());
         }
     }
-    map
+    Ok(map)
 }
 
 /// Extract the user's request text from a Codex user_message payload (fallback only).
@@ -133,27 +135,43 @@ fn parse_codex_session(
 /// Returns (model, fill_pct, session, tokens, last_active_ms, session_id).
 /// `session_id` is the session file path — stable, unlike the display title
 /// which can upgrade once the session_index thread_name appears.
-pub fn read_codex_jsonl_usage(
-    activity_secs: u64,
-    max_files: usize,
-) -> Option<(String, f64, String, u64, i64, String)> {
-    let sessions_dir = home_dir()?.join(".codex").join("sessions");
+pub fn read_codex_jsonl_usage(activity_secs: u64, max_files: usize) -> UsageResult {
+    let Some(home) = home_dir() else {
+        return Ok(None);
+    };
+    let sessions_dir = home.join(".codex").join("sessions");
+    if !sessions_dir.exists() {
+        return Ok(None);
+    }
     let cutoff = recent_cutoff(activity_secs);
-    let index = codex_session_index();
-    collect_jsonl(&sessions_dir)
+    let index = codex_session_index()?;
+    let recent: Vec<_> = collect_jsonl(&sessions_dir)?
         .iter()
         .take(max_files)
         .filter(|(mtime, _)| *mtime >= cutoff)
-        .filter_map(|(mtime, path)| {
-            let content = fs::read_to_string(path).ok()?;
-            let (model, fill_pct, session, tokens) = parse_codex_session(&content, &index)?;
-            let last_active_ms = mtime
-                .duration_since(UNIX_EPOCH)
-                .ok()
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
-            let session_id = path.to_string_lossy().into_owned();
-            Some((model, fill_pct, session, tokens, last_active_ms, session_id))
-        })
+        .cloned()
+        .collect();
+    let mut usages = Vec::new();
+    for (mtime, path) in &recent {
+        let content = fs::read_to_string(path)
+            .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+        let Some((model, fill_pct, session, tokens)) = parse_codex_session(&content, &index) else {
+            continue;
+        };
+        let last_active_ms = mtime
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let session_id = path.to_string_lossy().into_owned();
+        usages.push((model, fill_pct, session, tokens, last_active_ms, session_id));
+    }
+    if recent.is_empty() {
+        return Ok(None);
+    }
+    usages
+        .into_iter()
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .map(Some)
+        .ok_or_else(|| "No recognizable Codex usage record in recent session files".to_string())
 }

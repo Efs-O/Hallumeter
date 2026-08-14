@@ -5,55 +5,54 @@ use crate::core::{interpolate_curve, load_curves, risk_to_state, AMBER_THRESHOLD
 #[test]
 fn interpolates_midpoint() {
     // Sonnet knots: 25%=0.10, 40%=0.16. Midpoint 32.5% interpolates linearly.
-    let risk = interpolate_curve("claude-sonnet-4-6", 32.5);
+    let risk = interpolate_curve("claude-sonnet-4-6", 32.5).expect("known model curve");
     assert!((risk - 0.13).abs() < 0.001, "got {risk}");
 }
 
 #[test]
 fn clamps_at_zero() {
-    let risk = interpolate_curve("claude-sonnet-4-6", 0.0);
+    let risk = interpolate_curve("claude-sonnet-4-6", 0.0).expect("known model curve");
     assert!((risk - 0.0).abs() < f64::EPSILON);
 }
 
 #[test]
 fn baseline_knot_at_session_start() {
-    let risk = interpolate_curve("claude-sonnet-4-6", 5.0);
+    let risk = interpolate_curve("claude-sonnet-4-6", 5.0).expect("known model curve");
     assert!((risk - 0.03).abs() < f64::EPSILON, "got {risk}");
 
-    let risk_opus = interpolate_curve("claude-opus-4-6", 5.0);
+    let risk_opus = interpolate_curve("claude-opus-4-6", 5.0).expect("known model curve");
     assert!((risk_opus - 0.02).abs() < f64::EPSILON, "got {risk_opus}");
 
-    let risk_gpt = interpolate_curve("gpt-5-4", 0.0);
+    let risk_gpt = interpolate_curve("gpt-5-4", 0.0).expect("known model curve");
     assert!((risk_gpt - 0.00).abs() < f64::EPSILON, "got {risk_gpt}");
 }
 
 #[test]
 fn clamps_at_hundred() {
-    let risk = interpolate_curve("claude-sonnet-4-6", 100.0);
+    let risk = interpolate_curve("claude-sonnet-4-6", 100.0).expect("known model curve");
     assert!((risk - 0.45).abs() < f64::EPSILON);
 }
 
 #[test]
 fn exact_knot_point() {
-    let risk = interpolate_curve("claude-sonnet-4-6", 64.0);
+    let risk = interpolate_curve("claude-sonnet-4-6", 64.0).expect("known model curve");
     assert!((risk - 0.24).abs() < f64::EPSILON);
 }
 
 #[test]
-fn unknown_model_uses_generic_curve() {
-    let risk = interpolate_curve("gpt-99-unknown", 50.0);
-    assert!((0.0..=1.0).contains(&risk));
+fn unknown_model_has_no_risk_score() {
+    assert_eq!(interpolate_curve("gpt-99-unknown", 50.0), None);
 }
 
 #[test]
 fn date_suffixed_model_matches_family_curve() {
     // Prefix match on a '-' boundary: date-suffixed ids resolve to the family curve,
     // not the generic first-curve fallback.
-    let haiku = interpolate_curve("claude-haiku-4-5-20251001", 25.0);
-    let haiku_exact = interpolate_curve("claude-haiku-4-5", 25.0);
+    let haiku = interpolate_curve("claude-haiku-4-5-20251001", 25.0).expect("family curve");
+    let haiku_exact = interpolate_curve("claude-haiku-4-5", 25.0).expect("exact curve");
     assert!((haiku - haiku_exact).abs() < f64::EPSILON, "got {haiku}");
 
-    let sonnet = interpolate_curve("claude-sonnet-4-6", 25.0);
+    let sonnet = interpolate_curve("claude-sonnet-4-6", 25.0).expect("known model curve");
     assert!(
         (haiku - sonnet).abs() > 0.001,
         "haiku must not fall back to sonnet"

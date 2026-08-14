@@ -1,5 +1,6 @@
 mod audio;
 mod core;
+mod monitor;
 mod settings;
 mod sources;
 
@@ -7,13 +8,9 @@ mod sources;
 mod tests;
 
 use audio::AudioPlayer;
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-    time::{Duration, Instant},
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 use tauri::{
     image::Image,
@@ -40,11 +37,12 @@ fn set_mute(state: tauri::State<MuteState>, muted: bool) {
 #[tauri::command]
 fn play_panic_audio(app: tauri::AppHandle, mute: tauri::State<MuteState>) {
     if mute.0.load(Ordering::Relaxed) {
-        let _ = app.emit("panic-audio-done", ());
+        emit_panic_audio_done(&app);
         return;
     }
     let Ok(resource_dir) = app.path().resource_dir() else {
-        let _ = app.emit("panic-audio-done", ());
+        eprintln!("[audio] panic playback skipped: could not resolve resource directory");
+        emit_panic_audio_done(&app);
         return;
     };
     let muted = mute.0.clone();
@@ -53,23 +51,32 @@ fn play_panic_audio(app: tauri::AppHandle, mute: tauri::State<MuteState>) {
         if let Err(e) = audio::play_mp3_blocking(&path, muted) {
             eprintln!("[audio] panic playback error: {e}");
         }
-        let _ = app.emit("panic-audio-done", ());
+        emit_panic_audio_done(&app);
     });
+}
+
+fn emit_panic_audio_done(app: &tauri::AppHandle) {
+    if let Err(error) = app.emit("panic-audio-done", ()) {
+        eprintln!("[audio] failed to emit panic completion: {error}");
+    }
 }
 
 /// Returns true on first launch (flag file absent), false on subsequent runs.
 #[tauri::command]
-fn check_first_run(app: tauri::AppHandle) -> bool {
-    let Ok(data_dir) = app.path().app_data_dir() else {
-        return false;
-    };
+fn check_first_run(app: tauri::AppHandle) -> Result<bool, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve application data directory: {error}"))?;
     let flag = data_dir.join("seen.flag");
     if flag.exists() {
-        return false;
+        return Ok(false);
     }
-    let _ = std::fs::create_dir_all(&data_dir);
-    let _ = std::fs::write(&flag, "");
-    true
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("Could not create {}: {error}", data_dir.display()))?;
+    std::fs::write(&flag, "")
+        .map_err(|error| format!("Could not create {}: {error}", flag.display()))?;
+    Ok(true)
 }
 
 fn state_to_rgb(state: &str) -> [u8; 3] {
@@ -102,19 +109,49 @@ fn set_tray_color(app: &tauri::AppHandle, state: &str) {
     }
     let icon = Image::new_owned(rgba, SZ, SZ);
     if let Some(tray) = app.tray_by_id("main") {
-        let _ = tray.set_icon(Some(icon.clone()));
+        if let Err(error) = tray.set_icon(Some(icon.clone())) {
+            eprintln!("[window] failed to update tray icon: {error}");
+        }
     }
     if let Some(win) = app.get_webview_window("main") {
-        let _ = win.set_icon(icon);
+        if let Err(error) = win.set_icon(icon) {
+            eprintln!("[window] failed to update window icon: {error}");
+        }
+    }
+}
+
+fn refresh_window_icon(app: &tauri::AppHandle) {
+    match app.state::<AppColorState>().0.lock() {
+        Ok(state) => set_tray_color(app, &state),
+        Err(error) => eprintln!("[window] failed to read current icon state: {error}"),
+    }
+}
+
+fn show_and_focus(window: &tauri::WebviewWindow) {
+    if let Err(error) = window.show() {
+        eprintln!("[window] failed to show main window: {error}");
+        return;
+    }
+    if let Err(error) = window.set_focus() {
+        eprintln!("[window] failed to focus main window: {error}");
     }
 }
 
 fn persist_window_size(app: &tauri::AppHandle, width: u32, height: u32) {
     let Ok(data_dir) = app.path().app_data_dir() else {
+        eprintln!("[settings] could not resolve application data directory for window size");
         return;
     };
 
-    let mut settings = crate::settings::load_settings(&data_dir);
+    let mut settings = match crate::settings::load_settings(&data_dir) {
+        Ok(settings) => settings,
+        Err(error) => {
+            eprintln!(
+                "[settings] refused to overwrite settings while persisting window size: {error}"
+            );
+            return;
+        }
+    };
     if settings.window_width == Some(width) && settings.window_height == Some(height) {
         return;
     }
@@ -129,10 +166,19 @@ fn persist_window_size(app: &tauri::AppHandle, width: u32, height: u32) {
 
 fn persist_always_on_top(app: &tauri::AppHandle, always_on_top: bool) {
     let Ok(data_dir) = app.path().app_data_dir() else {
+        eprintln!("[settings] could not resolve application data directory for always-on-top");
         return;
     };
 
-    let mut settings = crate::settings::load_settings(&data_dir);
+    let mut settings = match crate::settings::load_settings(&data_dir) {
+        Ok(settings) => settings,
+        Err(error) => {
+            eprintln!(
+                "[settings] refused to overwrite settings while persisting always-on-top: {error}"
+            );
+            return;
+        }
+    };
     if settings.always_on_top == always_on_top {
         return;
     }
@@ -151,10 +197,8 @@ pub fn run() {
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-                let st = app.state::<AppColorState>().0.lock().unwrap().clone();
-                set_tray_color(app, &st);
+                show_and_focus(&w);
+                refresh_window_icon(app);
             }
         }));
     }
@@ -166,14 +210,43 @@ pub fn run() {
             #[cfg(debug_assertions)]
             eprintln!("[hallumeter] reading usage from ~/.claude/projects/");
 
-            let cfg = app
-                .path()
-                .app_data_dir()
-                .map(|d| crate::settings::load_settings(&d))
-                .unwrap_or_default();
+            let (cfg, mut setup_diagnostic) = match app.path().app_data_dir() {
+                Ok(data_dir) => match crate::settings::load_settings(&data_dir) {
+                    Ok(settings) => (settings, None),
+                    Err(error) => {
+                        eprintln!("[settings] {error}");
+                        (crate::settings::UserSettings::default(), Some(error))
+                    }
+                },
+                Err(error) => {
+                    let diagnostic =
+                        format!("Could not resolve application data directory: {error}");
+                    eprintln!("[settings] {diagnostic}");
+                    (crate::settings::UserSettings::default(), Some(diagnostic))
+                }
+            };
+
+            let desktop_dir = match app.path().desktop_dir() {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    eprintln!("[settings] could not resolve desktop directory: {error}");
+                    None
+                }
+            };
+            let continue_bridge_yaml =
+                match crate::settings::resolve_continue_bridge_yaml_path(&cfg, desktop_dir) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        eprintln!("[settings] {error}");
+                        if setup_diagnostic.is_none() {
+                            setup_diagnostic = Some(error);
+                        }
+                        None
+                    }
+                };
 
             // Shared state: current risk color, used to re-apply icon on window show.
-            let color_state: Arc<Mutex<String>> = Arc::new(Mutex::new("green".to_string()));
+            let color_state: Arc<Mutex<String>> = Arc::new(Mutex::new("unavailable".to_string()));
             app.manage(AppColorState(color_state.clone()));
 
             // Tray menu
@@ -202,30 +275,36 @@ pub fn run() {
                     {
                         let app = tray.app_handle();
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                            show_and_focus(&w);
                             // Re-apply dynamic icon — the taskbar may show the static
                             // bundle icon after the window was hidden.
-                            let st = app.state::<AppColorState>().0.lock().unwrap().clone();
-                            set_tray_color(app, &st);
+                            refresh_window_icon(app);
                         }
                     }
                 })
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                            let st = app.state::<AppColorState>().0.lock().unwrap().clone();
-                            set_tray_color(app, &st);
+                            show_and_focus(&w);
+                            refresh_window_icon(app);
                         }
                     }
                     "always_on_top" => {
                         if let Some(w) = app.get_webview_window("main") {
-                            let new_value = !w.is_always_on_top().unwrap_or(false);
-                            let _ = w.set_always_on_top(new_value);
-                            let _ = always_on_top_item_h.set_checked(new_value);
-                            persist_always_on_top(app, new_value);
+                            match w.is_always_on_top() {
+                                Ok(current_value) => {
+                                    let new_value = !current_value;
+                                    if let Err(error) = w.set_always_on_top(new_value) {
+                                        eprintln!("[window] failed to update always-on-top: {error}");
+                                    } else {
+                                        if let Err(error) = always_on_top_item_h.set_checked(new_value) {
+                                            eprintln!("[window] failed to update always-on-top menu: {error}");
+                                        }
+                                        persist_always_on_top(app, new_value);
+                                    }
+                                }
+                                Err(error) => eprintln!("[window] failed to read always-on-top: {error}"),
+                            }
                         }
                     }
                     "quit" => app.exit(0),
@@ -240,17 +319,21 @@ pub fn run() {
             // Re-apply dynamic icon whenever the window gains focus (covers the
             // case where Windows reverts to the static bundle icon on un-hide).
             if let Some(win) = app.get_webview_window("main") {
-                let _ = win.set_always_on_top(cfg.always_on_top);
+                if let Err(error) = win.set_always_on_top(cfg.always_on_top) {
+                    eprintln!("[window] failed to apply always-on-top setting: {error}");
+                }
                 if let (Some(width), Some(height)) = (cfg.window_width, cfg.window_height) {
-                    let _ =
-                        win.set_size(Size::Logical(LogicalSize::new(width as f64, height as f64)));
+                    if let Err(error) =
+                        win.set_size(Size::Logical(LogicalSize::new(width as f64, height as f64)))
+                    {
+                        eprintln!("[window] failed to restore saved size: {error}");
+                    }
                 }
 
                 let app_h = app.app_handle().clone();
                 win.on_window_event(move |event| match event {
                     tauri::WindowEvent::Focused(true) => {
-                        let st = app_h.state::<AppColorState>().0.lock().unwrap().clone();
-                        set_tray_color(&app_h, &st);
+                        refresh_window_icon(&app_h);
                     }
                     tauri::WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
                         persist_window_size(&app_h, size.width, size.height);
@@ -260,180 +343,27 @@ pub fn run() {
             }
 
             // Audio player — muted flag shared with set_mute command.
-            let mut player = AudioPlayer::new();
+            let player = AudioPlayer::new();
             app.manage(MuteState(player.muted.clone()));
 
-            let resource_dir = app.path().resource_dir()?;
+            let resource_dir = app.path().resource_dir().map_err(|error| {
+                eprintln!("[app] could not resolve resource directory: {error}");
+                error
+            })?;
             let app_handle = app.app_handle().clone();
             let color_state_thread = color_state;
 
             std::thread::spawn(move || {
-                use crate::core::{interpolate_curve, risk_to_state, ContextPayload};
-                use crate::settings::resolve_continue_bridge_yaml_path;
-                use crate::sources::{
-                    read_claude_jsonl_usage, read_codex_jsonl_usage, read_continue_usage,
-                    read_copilot_usage, read_forge_usage,
-                };
-
-                let activity_secs = cfg.activity_window_mins * 60;
-                let correlation_ms = cfg.continue_correlation_secs as i64 * 1000;
-                let continue_bridge_yaml = resolve_continue_bridge_yaml_path(&cfg);
-                let stale_timeout = Duration::from_secs(cfg.stale_timeout_secs);
-
-                let mut last_data = Instant::now();
-                let mut prev_state = String::new();
-                let mut prev_fill_pct = -1.0_f64;
-                let mut request_counter: u32 = 0;
-                let mut play_threshold: u32 = player.rand_threshold() as u32;
-                let mut prev_session = String::new();
-                let mut panic_played = false;
-                let mut last_variant_by_state: HashMap<String, u8> = HashMap::new();
-
-                loop {
-                    // Collect all active sources, annotate with risk_score.
-                    // (model, fill_pct, session, tokens, last_active_ms, session_id, risk_score)
-                    let mut candidates: Vec<(String, f64, String, u64, i64, String, f64)> = [
-                        read_claude_jsonl_usage(activity_secs, cfg.claude_max_files),
-                        read_codex_jsonl_usage(activity_secs, cfg.codex_max_files),
-                        read_forge_usage(activity_secs),
-                        read_copilot_usage(activity_secs, cfg.copilot_max_files),
-                        read_continue_usage(
-                            activity_secs,
-                            correlation_ms,
-                            continue_bridge_yaml.clone(),
-                        ),
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .map(
-                        |(model, fill_pct, session, tokens, last_active_ms, session_id)| {
-                            let adjusted = (fill_pct + cfg.context_overhead_pct).clamp(0.0, 100.0);
-                            let risk_score = interpolate_curve(&model, adjusted);
-                            (
-                                model,
-                                adjusted,
-                                session,
-                                tokens,
-                                last_active_ms,
-                                session_id,
-                                risk_score,
-                            )
-                        },
-                    )
-                    .collect();
-
-                    // Select most recently active source.
-                    // If two sources are within 60s of each other, prefer higher risk_score.
-                    candidates.sort_by(|a, b| {
-                        let time_diff = (a.4 - b.4).abs();
-                        if time_diff <= 60_000 {
-                            b.6.partial_cmp(&a.6).unwrap_or(std::cmp::Ordering::Equal)
-                        } else {
-                            b.4.cmp(&a.4)
-                        }
-                    });
-                    let best = candidates.into_iter().next().map(
-                        |(model, fill_pct, session, tokens, _, session_id, risk_score)| {
-                            (model, fill_pct, session, tokens, session_id, risk_score)
-                        },
-                    );
-
-                    if let Some((model, fill_pct, session, tokens, session_id, risk_score)) = best {
-                        let state =
-                            risk_to_state(risk_score, cfg.amber_threshold, cfg.red_threshold)
-                                .to_string();
-                        last_data = Instant::now();
-
-                        // Reset panic one-shot when a new session is detected.
-                        // Keyed on the stable session_id — the display title mutates
-                        // (first-message → ai-title → custom-title) and must not reset it.
-                        if session_id != prev_session && !prev_session.is_empty() {
-                            panic_played = false;
-                        }
-                        prev_session = session_id.clone();
-
-                        // Panic Easter egg — fires once when context hits 95%.
-                        // Audio + visuals are owned entirely by the frontend
-                        // (`play_panic_audio`, which emits `panic-audio-done` for the
-                        // cut-to-black sync). The backend only tracks the one-shot so it
-                        // can suppress the normal state-change cue below and avoid overlap.
-                        let panic_firing = fill_pct >= 95.0 && !panic_played;
-                        if panic_firing {
-                            panic_played = true;
-                        }
-
-                        // Keep shared state in sync for window-focus re-application.
-                        *color_state_thread.lock().unwrap() = state.clone();
-
-                        let mut emit_variant: u8 = 0;
-
-                        // Skip state-change audio when panic fires to avoid overlap.
-                        if panic_firing {
-                            prev_state = state.clone();
-                            request_counter = 0;
-                        } else if state != prev_state {
-                            let v = player
-                                .rand_1_5_avoiding(last_variant_by_state.get(&state).copied());
-                            player.play(&state, v, &resource_dir);
-                            last_variant_by_state.insert(state.clone(), v);
-                            emit_variant = v;
-                            prev_state = state.clone();
-                            request_counter = 0;
-                            play_threshold = player.rand_threshold() as u32;
-                        } else if fill_pct > prev_fill_pct && prev_fill_pct >= 0.0 {
-                            request_counter += 1;
-                            if request_counter >= play_threshold {
-                                let v = player
-                                    .rand_1_5_avoiding(last_variant_by_state.get(&state).copied());
-                                player.play(&state, v, &resource_dir);
-                                last_variant_by_state.insert(state.clone(), v);
-                                emit_variant = v;
-                                request_counter = 0;
-                                play_threshold = player.rand_threshold() as u32;
-                            }
-                        }
-
-                        prev_fill_pct = fill_pct;
-
-                        let _ = app_handle.emit(
-                            "context-update",
-                            ContextPayload {
-                                fill_pct,
-                                risk_score,
-                                state: state.clone(),
-                                model,
-                                session,
-                                session_id,
-                                variant: emit_variant,
-                                tokens,
-                            },
-                        );
-                        set_tray_color(&app_handle, &state);
-                    } else if last_data.elapsed() >= stale_timeout {
-                        if prev_state != "stale" {
-                            prev_state = "stale".to_string();
-                            prev_fill_pct = -1.0;
-                            request_counter = 0;
-                            play_threshold = player.rand_threshold() as u32;
-                        }
-                        *color_state_thread.lock().unwrap() = "stale".to_string();
-                        let _ = app_handle.emit(
-                            "context-update",
-                            ContextPayload {
-                                fill_pct: 0.0,
-                                risk_score: 0.0,
-                                state: "stale".to_string(),
-                                model: "—".to_string(),
-                                session: "—".to_string(),
-                                session_id: "—".to_string(),
-                                variant: 0,
-                                tokens: 0,
-                            },
-                        );
-                        set_tray_color(&app_handle, "stale");
-                    }
-                    std::thread::sleep(Duration::from_secs(5));
-                }
+                crate::monitor::Monitor::new(
+                    app_handle,
+                    color_state_thread,
+                    resource_dir,
+                    cfg,
+                    continue_bridge_yaml,
+                    setup_diagnostic,
+                    player,
+                )
+                .run();
             });
 
             Ok(())

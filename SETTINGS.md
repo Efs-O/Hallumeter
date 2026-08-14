@@ -20,14 +20,16 @@ If the file does not exist, HalluMeter uses the defaults shown below. You can cr
 
 ```json
 {
-  "activity_window_mins": 30,
+  "activity_window_mins": 15,
   "stale_timeout_secs": 30,
   "claude_max_files": 6,
   "codex_max_files": 10,
-  "forge_max_files": 10,
+  "copilot_max_files": 10,
   "continue_correlation_secs": 120,
-  "amber_threshold": 0.20,
-  "red_threshold": 0.38
+  "amber_threshold": 0.15,
+  "red_threshold": 0.30,
+  "context_overhead_pct": 5.0,
+  "always_on_top": true
 }
 ```
 
@@ -70,9 +72,9 @@ Maximum number of Codex session files considered per poll cycle. Same logic as `
 
 ---
 
-### `forge_max_files` — default `10`
+### `copilot_max_files` — default `10`
 
-Maximum number of Forge AI (Copilot CLI) sessions considered per poll cycle.
+Maximum number of GitHub Copilot CLI sessions considered per poll cycle.
 
 Forge uses the GitHub Copilot CLI and persists sessions under your Copilot directory (normally `~/.copilot/session-state/` on Unix, `%USERPROFILE%\.copilot\session-state` on Windows). If you use a custom CLI home, HalluMeter also respects `COPILOT_HOME` ([Copilot CLI config](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)).
 
@@ -102,11 +104,11 @@ You still need a valid `~/.continue/…` **session JSONL** for activity; this on
 
 ---
 
-### `amber_threshold` — default `0.20`
+### `amber_threshold` — default `0.15`
 
 Risk score (0.0–1.0) at which the ring turns **amber**.
 
-The risk score is calculated from HalluMeter's degradation curves — it is not the same as fill percentage. At the default of `0.20`, amber triggers at roughly 40–45% context fill on Claude Sonnet 4.6.
+The risk score is calculated from HalluMeter's degradation curves — it is not the same as fill percentage. At the default of `0.15`, amber triggers at roughly 38–40% context fill on Claude Sonnet 4.6.
 
 - Lower this (e.g. `0.15`) for an earlier warning.
 - Raise this (e.g. `0.28`) if amber fires too often for your workflow.
@@ -114,11 +116,11 @@ The risk score is calculated from HalluMeter's degradation curves — it is not 
 
 ---
 
-### `red_threshold` — default `0.38`
+### `red_threshold` — default `0.30`
 
 Risk score (0.0–1.0) at which the ring turns **red**.
 
-At the default of `0.38`, red triggers at roughly 75–80% context fill on Claude Sonnet 4.6.
+At the default of `0.30`, red triggers at roughly 75–80% context fill on Claude Sonnet 4.6.
 
 - Lower this (e.g. `0.30`) for an earlier red alert.
 - Raise this (e.g. `0.50`) to reserve red for truly critical fill levels.
@@ -164,5 +166,5 @@ Fields not listed here stay at their defaults.
 
 - JSON does not support comments — remove any before saving.
 - The file is only read at startup. Restart HalluMeter after editing.
-- If the file contains invalid JSON, HalluMeter silently falls back to all defaults.
+- Invalid or out-of-range settings leave monitoring unavailable and show a diagnostic. Correct the file and restart HalluMeter; it will not silently use a different configuration.
 - `amber_threshold` and `red_threshold` are risk scores, not fill percentages. The relationship between fill % and risk depends on the model curve — see [RESEARCH.md](RESEARCH.md).

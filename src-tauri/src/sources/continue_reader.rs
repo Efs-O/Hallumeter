@@ -10,7 +10,7 @@ use super::continue_types::{
     ContinueConfigFile, ContinueModelConfig, ContinueSessionMeta, ContinueSessionsFileEntry,
     ContinueTokenEvent,
 };
-use super::recent_cutoff_ms;
+use super::{recent_cutoff_ms, UsageResult};
 
 fn continue_sessions_index_from_path(path: &Path) -> HashMap<String, ContinueSessionMeta> {
     let mut map = HashMap::new();
@@ -113,19 +113,14 @@ fn continue_model_config_map(root: &Path) -> HashMap<String, ContinueModelConfig
     continue_model_config_map_from_path(&root.join("config.yaml"))
 }
 
-/// Prefer a llamabridge `bridge.yaml` when the path exists and contains models; otherwise
-/// fall back to `~/.continue/config.yaml`.
+/// Prefer a configured llamabridge `bridge.yaml`; invalid bridge data intentionally does not
+/// fall back to a different source.
 fn resolved_model_map(
     continue_root: &Path,
     bridge_yaml: Option<&Path>,
 ) -> HashMap<String, ContinueModelConfig> {
     if let Some(p) = bridge_yaml {
-        if p.is_file() {
-            let from_bridge = bridge_model_config_map_from_path(p);
-            if !from_bridge.is_empty() {
-                return from_bridge;
-            }
-        }
+        return bridge_model_config_map_from_path(p).unwrap_or_default();
     }
     continue_model_config_map(continue_root)
 }
@@ -313,7 +308,26 @@ pub fn read_continue_usage(
     activity_secs: u64,
     correlation_ms: i64,
     bridge_yaml: Option<std::path::PathBuf>,
-) -> Option<(String, f64, String, u64, i64, String)> {
-    let root = continue_root()?;
-    read_continue_usage_from_root(&root, activity_secs, correlation_ms, bridge_yaml.as_deref())
+) -> UsageResult {
+    let Some(root) = continue_root() else {
+        return Ok(None);
+    };
+    if !root.exists() {
+        return Ok(None);
+    }
+    if let Some(path) = bridge_yaml.as_deref() {
+        let models = bridge_model_config_map_from_path(path)?;
+        if models.is_empty() {
+            return Err(format!(
+                "Continue bridge {} does not define any positive model num_ctx values",
+                path.display()
+            ));
+        }
+    }
+    Ok(read_continue_usage_from_root(
+        &root,
+        activity_secs,
+        correlation_ms,
+        bridge_yaml.as_deref(),
+    ))
 }

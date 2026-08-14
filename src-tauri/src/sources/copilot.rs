@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::continue_types::{continue_normalize_model_id, continue_parse_timestamp_ms};
-use super::{home_dir, recent_cutoff, truncate40};
+use super::{home_dir, recent_cutoff, truncate40, UsageResult};
 
 fn copilot_session_state_root() -> Option<PathBuf> {
     if let Ok(h) = std::env::var("COPILOT_HOME") {
@@ -22,12 +22,19 @@ fn copilot_session_state_root() -> Option<PathBuf> {
 }
 
 /// Session dirs under session-state, most recently modified `events.jsonl` first.
-fn collect_copilot_session_dirs(session_state: &Path) -> Vec<(SystemTime, PathBuf)> {
+fn collect_copilot_session_dirs(
+    session_state: &Path,
+) -> Result<Vec<(SystemTime, PathBuf)>, String> {
     let mut out: Vec<(SystemTime, PathBuf)> = Vec::new();
-    let Ok(entries) = fs::read_dir(session_state) else {
-        return out;
-    };
-    for entry in entries.flatten() {
+    let entries = fs::read_dir(session_state)
+        .map_err(|error| format!("Could not read {}: {error}", session_state.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "Could not read a session entry under {}: {error}",
+                session_state.display()
+            )
+        })?;
         let dir = entry.path();
         if !dir.is_dir() {
             continue;
@@ -36,14 +43,19 @@ fn collect_copilot_session_dirs(session_state: &Path) -> Vec<(SystemTime, PathBu
         if !events.is_file() {
             continue;
         }
-        if let Ok(meta) = events.metadata() {
-            if let Ok(mtime) = meta.modified() {
-                out.push((mtime, dir));
-            }
-        }
+        let metadata = events
+            .metadata()
+            .map_err(|error| format!("Could not inspect {}: {error}", events.display()))?;
+        let modified = metadata.modified().map_err(|error| {
+            format!(
+                "Could not read modification time for {}: {error}",
+                events.display()
+            )
+        })?;
+        out.push((modified, dir));
     }
     out.sort_by_key(|(t, _)| Reverse(*t));
-    out
+    Ok(out)
 }
 
 fn json_u64(obj: &Value, key: &str) -> Option<u64> {
@@ -132,7 +144,7 @@ fn parse_events_jsonl(content: &str) -> Option<(String, f64, u64)> {
         } else if let Some(ct) = scan.shutdown_tokens {
             let m_raw = scan.shutdown_model.or(scan.model)?;
             let normalized = copilot_normalize_model_id(&m_raw);
-            let lim = context_window_for(&normalized).unwrap_or(128_000);
+            let lim = context_window_for(&normalized)?;
             (ct, lim, m_raw)
         } else {
             return None;
@@ -170,35 +182,45 @@ fn max_timestamp_ms_in_file(content: &str, file_mtime_ms: i64) -> i64 {
 
 /// Active GitHub Copilot CLI sessions under ~/.copilot/session-state.
 /// Returns `(model, fill_pct, session, tokens, last_active_ms, session_id)`.
-pub fn read_copilot_usage(
-    activity_secs: u64,
-    max_files: usize,
-) -> Option<(String, f64, String, u64, i64, String)> {
-    let session_state = copilot_session_state_root()?;
+pub fn read_copilot_usage(activity_secs: u64, max_files: usize) -> UsageResult {
+    let Some(session_state) = copilot_session_state_root() else {
+        return Ok(None);
+    };
     if !session_state.is_dir() {
-        return None;
+        return Ok(None);
     }
     let cutoff = recent_cutoff(activity_secs);
-
-    collect_copilot_session_dirs(&session_state)
+    let recent: Vec<_> = collect_copilot_session_dirs(&session_state)?
         .into_iter()
         .take(max_files)
         .filter(|(mtime, _)| *mtime >= cutoff)
-        .filter_map(|(mtime, dir)| {
-            let path = dir.join("events.jsonl");
-            let content = fs::read_to_string(&path).ok()?;
-            let (model, fill_pct, tokens) = parse_events_jsonl(&content)?;
-            let file_mtime_ms = mtime
-                .duration_since(UNIX_EPOCH)
-                .ok()
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
-            let last_active_ms = max_timestamp_ms_in_file(&content, file_mtime_ms);
-            let session = session_label(&dir);
-            let session_id = dir.to_string_lossy().into_owned();
-            Some((model, fill_pct, session, tokens, last_active_ms, session_id))
-        })
+        .collect();
+    let mut usages = Vec::new();
+    for (mtime, dir) in recent.iter() {
+        let path = dir.join("events.jsonl");
+        let content = fs::read_to_string(&path)
+            .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+        let Some((model, fill_pct, tokens)) = parse_events_jsonl(&content) else {
+            continue;
+        };
+        let file_mtime_ms = mtime
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let last_active_ms = max_timestamp_ms_in_file(&content, file_mtime_ms);
+        let session = session_label(dir);
+        let session_id = dir.to_string_lossy().into_owned();
+        usages.push((model, fill_pct, session, tokens, last_active_ms, session_id));
+    }
+    if recent.is_empty() {
+        return Ok(None);
+    }
+    usages
+        .into_iter()
         .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .map(Some)
+        .ok_or_else(|| "No recognizable Copilot usage record in recent session files".to_string())
 }
 
 #[cfg(test)]

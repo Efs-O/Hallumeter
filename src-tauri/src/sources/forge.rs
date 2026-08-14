@@ -6,7 +6,7 @@
 use serde::Deserialize;
 use std::time::UNIX_EPOCH;
 
-use super::{home_dir, recent_cutoff_ms};
+use super::{home_dir, recent_cutoff_ms, UsageResult};
 
 const BRIDGE_FILE: &str = "hallumeter-bridge.json";
 
@@ -24,43 +24,60 @@ fn forge_bridge_path() -> Option<std::path::PathBuf> {
 
 /// Active Forge VS Code extension session from ~/.forge/hallumeter-bridge.json.
 /// Returns `(model, fill_pct, session, tokens, last_active_ms, session_id)`.
-pub fn read_forge_usage(activity_secs: u64) -> Option<(String, f64, String, u64, i64, String)> {
-    let path = forge_bridge_path()?;
-    let content = std::fs::read_to_string(&path).ok()?;
-    let bridge: ForgeBridge = serde_json::from_str(&content).ok()?;
+pub fn read_forge_usage(activity_secs: u64) -> UsageResult {
+    let Some(path) = forge_bridge_path() else {
+        return Ok(None);
+    };
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let bridge: ForgeBridge = serde_json::from_str(&content)
+        .map_err(|error| format!("Invalid Forge bridge {}: {error}", path.display()))?;
 
     if bridge.max_tokens == 0 {
-        return None;
+        return Err(format!(
+            "Forge bridge {} has max_tokens = 0",
+            path.display()
+        ));
     }
 
     let cutoff_ms = recent_cutoff_ms(activity_secs as i64);
     if bridge.timestamp_ms < cutoff_ms {
-        return None;
+        return Ok(None);
     }
 
     // Sanity-check: file must also be recent on disk (guards against stale writes)
-    let mtime_ms = std::fs::metadata(&path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    let modified = std::fs::metadata(&path)
+        .map_err(|error| format!("Could not inspect {}: {error}", path.display()))?
+        .modified()
+        .map_err(|error| {
+            format!(
+                "Could not read modification time for {}: {error}",
+                path.display()
+            )
+        })?;
+    let mtime_ms = modified
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("Invalid modification time for {}: {error}", path.display()))?
+        .as_millis() as i64;
     if mtime_ms < cutoff_ms {
-        return None;
+        return Ok(None);
     }
 
     let fill = (bridge.used_tokens as f64 / bridge.max_tokens as f64 * 100.0).clamp(0.0, 100.0);
     let session = format!("Forge · {}", bridge.model);
     // Single bridge file — the model id is the most stable identity available.
     let session_id = format!("forge:{}", bridge.model);
-    Some((
+    Ok(Some((
         bridge.model,
         fill,
         session,
         bridge.used_tokens,
         bridge.timestamp_ms,
         session_id,
-    ))
+    )))
 }
 
 #[cfg(test)]

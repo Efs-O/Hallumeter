@@ -22,14 +22,12 @@ struct BridgeModelBlock {
 /// `models.<id>.num_ctx` from a bridge-style YAML (e.g. llamabridge `config/bridge.yaml`).
 pub(crate) fn bridge_model_config_map_from_path(
     path: &Path,
-) -> HashMap<String, ContinueModelConfig> {
+) -> Result<HashMap<String, ContinueModelConfig>, String> {
     let mut map = HashMap::new();
-    let Ok(content) = fs::read_to_string(path) else {
-        return map;
-    };
-    let Ok(file) = serde_yaml::from_str::<BridgeYamlFile>(&content) else {
-        return map;
-    };
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    let file = serde_yaml::from_str::<BridgeYamlFile>(&content)
+        .map_err(|error| format!("Invalid Continue bridge {}: {error}", path.display()))?;
 
     for (raw_id, block) in file.models {
         let Some(context_window) = block.num_ctx.filter(|n| *n > 0) else {
@@ -46,7 +44,7 @@ pub(crate) fn bridge_model_config_map_from_path(
         map.insert(key, config);
     }
 
-    map
+    Ok(map)
 }
 
 #[cfg(test)]
@@ -62,7 +60,7 @@ mod tests {
             b"models:\n  qwen36-27b-q3km:\n    num_ctx: 98304\n    gguf_path: /dev/null\n",
         )
         .unwrap();
-        let m = bridge_model_config_map_from_path(&path);
+        let m = bridge_model_config_map_from_path(&path).expect("parses bridge yaml");
         let _ = std::fs::remove_file(&path);
         let entry = m.get("qwen36-27b-q3km").expect("key from yaml");
         assert_eq!(entry.context_window, 98304);

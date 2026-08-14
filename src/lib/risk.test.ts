@@ -20,7 +20,7 @@ describe("stateToMessage", () => {
   it("amber",       () => expect(stateToMessage("amber")).toBe("Logic degrading"));
   it("red",         () => expect(stateToMessage("red")).toBe("Clanker mode activated"));
   it("stale",       () => expect(stateToMessage("stale")).toBe("Waiting..."));
-  it("unavailable", () => expect(stateToMessage("unavailable")).toBe("Claude not found"));
+  it("unavailable", () => expect(stateToMessage("unavailable")).toBe("Monitoring unavailable"));
 });
 
 describe("fillPctToDashOffset", () => {

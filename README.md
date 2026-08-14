@@ -40,7 +40,7 @@ Audio cues play periodically as a background reminder, so you don't have to watc
 | [Forge](https://github.com/Efs-O/Forge) (VS Code, local llama.cpp) | Supported |
 | Cursor Agents | Supported |
 
-> **Continue / local LLM note:** HalluMeter reads the context window size from `contextLength` in `~/.continue/config.yaml`. If `contextLength` is not set for the active model, that session will not appear — set it for every model you want monitored. If you use [LlamaBridge](https://github.com/Efs-O/LlamaBridge), HalluMeter can read context sizes directly from your `bridge.yaml` (`num_ctx` per model) — set the `continue_bridge_yaml` path in [SETTINGS.md](SETTINGS.md). Token fill is a best-effort estimate correlated from Continue's local telemetry files. Hallucination risk scores for local open-source models (Llama, Qwen, Gemma, Mistral, etc.) use a **generic fallback curve** — see [RESEARCH.md](RESEARCH.md) for why accuracy is lower than for Claude Code or Codex.
+> **Continue / local LLM note:** HalluMeter reads the context window size from `contextLength` in `~/.continue/config.yaml`. If `contextLength` is not set for the active model, that session will not appear — set it for every model you want monitored. If you use [LlamaBridge](https://github.com/Efs-O/LlamaBridge), HalluMeter can read context sizes directly from your `bridge.yaml` (`num_ctx` per model) — set the `continue_bridge_yaml` path in [SETTINGS.md](SETTINGS.md). Token fill is a best-effort estimate correlated from Continue's local telemetry files. A model also needs an explicit risk curve in `src-tauri/assets/curves.json`; HalluMeter shows an unavailable diagnostic instead of inventing a generic risk score for unsupported models.
 
 ---
 

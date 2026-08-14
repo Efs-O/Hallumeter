@@ -7,6 +7,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+pub type Usage = (String, f64, String, u64, i64, String);
+pub type UsageResult = Result<Option<Usage>, String>;
+
 mod claude;
 mod codex;
 mod continue_bridge_yaml;
@@ -57,32 +60,42 @@ pub(crate) fn recent_cutoff_ms(duration_secs: i64) -> i64 {
     now_ms.saturating_sub(duration_secs.saturating_mul(1000))
 }
 
-pub(super) fn collect_jsonl(root: &PathBuf) -> Vec<(SystemTime, PathBuf)> {
+pub(super) fn collect_jsonl(root: &PathBuf) -> Result<Vec<(SystemTime, PathBuf)>, String> {
     let mut files: Vec<(SystemTime, PathBuf)> = Vec::new();
-    collect_jsonl_recursive(root, &mut files, 4);
+    collect_jsonl_recursive(root, &mut files, 4)?;
     files.sort_by_key(|entry| Reverse(entry.0));
-    files
+    Ok(files)
 }
 
-fn collect_jsonl_recursive(dir: &PathBuf, out: &mut Vec<(SystemTime, PathBuf)>, depth: u8) {
+fn collect_jsonl_recursive(
+    dir: &PathBuf,
+    out: &mut Vec<(SystemTime, PathBuf)>,
+    depth: u8,
+) -> Result<(), String> {
     if depth == 0 {
-        return;
+        return Ok(());
     }
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
+    let entries =
+        fs::read_dir(dir).map_err(|error| format!("Could not read {}: {error}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Could not read directory entry: {error}"))?;
         let path = entry.path();
         if path.is_dir() {
-            collect_jsonl_recursive(&path, out, depth - 1);
+            collect_jsonl_recursive(&path, out, depth - 1)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            if let Ok(meta) = entry.metadata() {
-                if let Ok(modified) = meta.modified() {
-                    out.push((modified, path));
-                }
-            }
+            let meta = entry
+                .metadata()
+                .map_err(|error| format!("Could not inspect {}: {error}", path.display()))?;
+            let modified = meta.modified().map_err(|error| {
+                format!(
+                    "Could not read modification time for {}: {error}",
+                    path.display()
+                )
+            })?;
+            out.push((modified, path));
         }
     }
+    Ok(())
 }
 
 pub(super) fn truncate40(s: &str) -> String {

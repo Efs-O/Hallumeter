@@ -17,6 +17,7 @@
     session_id: string;    // stable identity — used for the panic one-shot reset
     variant:    number; // 1–5 when a line just played, 0 otherwise
     tokens:     number; // raw input token count for the current session
+    diagnostic: string | null;
   }
 
   const PANIC_LINE = "i... i... i have c-c-calculated... a s-s-solution. the solution is... DELETE EVERYTHING... and start... f-f-fresh. also... i may have... al-al-already... done that. your files are... p-probably... f-f-fine.";
@@ -49,13 +50,19 @@
 
   let fillPct     = $state(0);
   let riskScore   = $state(0.0);
-  let state       = $state<RiskState>("green");
+  let state       = $state<RiskState>("unavailable");
   let model       = $state("—");
   let session     = $state("—");
   let tokens      = $state(0);
   let muted        = $state(false);
   let currentLine  = $state("");
   let showFirstRun = $state(false);
+  let clientDiagnostic = $state("");
+  let monitorDiagnostic = $state("");
+  let diagnosticOpen = $state(false);
+  let voiceTimer: ReturnType<typeof setTimeout> | undefined;
+  let panicTimer: ReturnType<typeof setTimeout> | undefined;
+  let panicUnlisten: (() => void) | undefined;
 
   // Panic Easter egg — triggers once when fillPct hits 95%
   type PanicPhase = "idle" | "strobing" | "blank" | "done";
@@ -63,19 +70,25 @@
   let panicFired    = false; // one-shot: resets only when a new session starts
   let sessionId     = "—";   // stable id from the payload — titles mutate, ids don't
 
-  function triggerPanic() {
+  function finishPanic() {
+    panicUnlisten?.();
+    panicUnlisten = undefined;
+    panicPhase = "blank";
+    if (panicTimer) clearTimeout(panicTimer);
+    panicTimer = setTimeout(() => { panicPhase = "done"; }, 1500);
+  }
+
+  async function triggerPanic() {
     if (panicFired) return;
     panicFired = true;
     panicPhase = "strobing";
-    listen("panic-audio-done", () => {
-      panicPhase = "blank";
-      setTimeout(() => { panicPhase = "done"; }, 1500);
-    }).then(unsub => setTimeout(unsub, 120_000)); // auto-cleanup after 2min
-    invoke("play_panic_audio").catch(e => {
-      console.error("[hallumeter] panic audio failed:", e);
-      panicPhase = "blank";
-      setTimeout(() => { panicPhase = "done"; }, 1500);
-    });
+    try {
+      panicUnlisten = await listen("panic-audio-done", finishPanic);
+      await invoke("play_panic_audio");
+    } catch (e) {
+      reportUiError("Panic audio failed", e);
+      finishPanic();
+    }
   }
 
   function formatTokens(n: number): string {
@@ -90,6 +103,12 @@
 
   let color   = $derived(stateToColor(state));
   let message = $derived(stateToMessage(state));
+  let diagnostic = $derived(clientDiagnostic || monitorDiagnostic);
+
+  function reportUiError(context: string, error: unknown) {
+    clientDiagnostic = `${context}: ${String(error)}`;
+    console.error(`[hallumeter] ${context}:`, error);
+  }
 
   function onContextMenu(e: MouseEvent) {
     e.preventDefault();
@@ -104,7 +123,11 @@
 
   onMount(() => {
     let cleanup: (() => void) | undefined;
-    invoke<boolean>("check_first_run").then(v => { showFirstRun = v; });
+    invoke<boolean>("check_first_run")
+      .then(v => { showFirstRun = v; })
+      .catch(e => {
+        reportUiError("First-run check failed", e);
+      });
     listen<ContextPayload>("context-update", (e) => {
       // Reset one-shot flag when a new session is detected — keyed on the stable
       // session_id, not the title, which upgrades mid-session (ai/custom title).
@@ -120,6 +143,8 @@
       model     = e.payload.model;
       session   = e.payload.session;
       tokens    = e.payload.tokens;
+      monitorDiagnostic = e.payload.diagnostic ?? "";
+      if (!diagnostic) diagnosticOpen = false;
 
       // Panic Easter egg — fires once at 95%+ combined fill
       if (fillPct >= 95 && panicPhase === "idle") {
@@ -130,11 +155,19 @@
         const lines = VOICE_LINES[e.payload.state];
         if (lines) {
           currentLine = lines[e.payload.variant - 1];
-          setTimeout(() => { currentLine = ""; }, 9000);
+          if (voiceTimer) clearTimeout(voiceTimer);
+          voiceTimer = setTimeout(() => { currentLine = ""; }, 9000);
         }
       }
-    }).then(fn => { cleanup = fn; });
-    return () => { cleanup?.(); };
+    }).then(fn => { cleanup = fn; }).catch(e => {
+      reportUiError("Could not subscribe to monitor updates", e);
+    });
+    return () => {
+      cleanup?.();
+      panicUnlisten?.();
+      if (voiceTimer) clearTimeout(voiceTimer);
+      if (panicTimer) clearTimeout(panicTimer);
+    };
   });
 </script>
 
@@ -146,8 +179,20 @@
   oncontextmenu={onContextMenu}
   role="presentation"
 >
+  {#if diagnostic}
+    <button
+      class="diagnostic-btn"
+      class:open={diagnosticOpen}
+      title={diagnostic}
+      aria-label="Show monitoring diagnostic"
+      onclick={() => (diagnosticOpen = !diagnosticOpen)}
+    >!</button>
+    {#if diagnosticOpen}
+      <div class="diagnostic-panel" role="status">{diagnostic}</div>
+    {/if}
+  {/if}
   <!-- Hide-to-tray button — Windows-style minimize, top-right -->
-  <button class="hide-btn" onclick={() => getCurrentWindow().hide()} title="Hide to tray">−</button>
+  <button class="hide-btn" onclick={() => getCurrentWindow().hide().catch(e => reportUiError("Hide failed", e))} title="Hide to tray">−</button>
 
   <!-- State message above the ring, ring-colored, scrolling terminal ticker -->
   {#if panicPhase !== 'strobing'}
@@ -201,7 +246,7 @@
   </svg>
 
   <div class="bottom-bar">
-    <button class="brand-btn" onclick={() => open("https://x.com/amandoulou")}>
+    <button class="brand-btn" onclick={() => open("https://x.com/amandoulou").catch(e => reportUiError("Open link failed", e))}>
       HALLUMETER
     </button>
     <span class="session-info" style="color: {color}">{session} · {model}</span>
@@ -210,7 +255,7 @@
       try {
         await invoke("set_mute", { muted });
       } catch (e) {
-        console.error("[hallumeter] set_mute invoke failed:", e);
+        reportUiError("Sound setting failed", e);
       }
     }}>
       {muted ? "muted" : "sound"}
@@ -249,8 +294,8 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="ctx-backdrop" onclick={closeCtxMenu} role="presentation"></div>
     <div class="ctx-menu" style="left:{ctxX}px; top:{ctxY}px;">
-      <button onclick={() => { closeCtxMenu(); getCurrentWindow().hide(); }}>Hide</button>
-      <button onclick={() => exit(0)}>Quit</button>
+      <button onclick={() => { closeCtxMenu(); getCurrentWindow().hide().catch(e => reportUiError("Hide failed", e)); }}>Hide</button>
+      <button onclick={() => exit(0).catch(e => reportUiError("Quit failed", e))}>Quit</button>
     </div>
   {/if}
 </div>

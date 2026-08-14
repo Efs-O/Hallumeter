@@ -25,7 +25,7 @@ export function stateToMessage(state: RiskState): string {
     case "amber":       return "Logic degrading";
     case "red":         return "Clanker mode activated";
     case "stale":       return "Waiting...";
-    case "unavailable": return "Claude not found";
+    case "unavailable": return "Monitoring unavailable";
   }
 }
 

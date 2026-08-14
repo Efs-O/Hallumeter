@@ -5,28 +5,33 @@ use crate::core::{AMBER_THRESHOLD, RED_THRESHOLD};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// If `UserSettings::continue_bridge_yaml` points to an existing file, that path
-/// is used. Otherwise, when `Desktop/llamabridge/config/bridge.yaml` exists under
-/// `USERPROFILE` / `HOME`, that file is used (for local llamabridge setups).
-pub fn resolve_continue_bridge_yaml_path(settings: &UserSettings) -> Option<PathBuf> {
+/// Resolves an explicit bridge path, or the conventional path beneath the platform desktop.
+/// An invalid explicit path is an error instead of silently selecting a different source.
+pub fn resolve_continue_bridge_yaml_path(
+    settings: &UserSettings,
+    desktop_dir: Option<PathBuf>,
+) -> Result<Option<PathBuf>, String> {
     if let Some(ref s) = settings.continue_bridge_yaml {
         let p = PathBuf::from(s.trim());
         if p.is_file() {
-            return Some(p);
+            return Ok(Some(p));
         }
+        return Err(format!(
+            "Configured Continue bridge file was not found: {}",
+            p.display()
+        ));
     }
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .ok()?;
-    let p = PathBuf::from(home)
-        .join("Desktop")
+    let Some(desktop_dir) = desktop_dir else {
+        return Ok(None);
+    };
+    let p = desktop_dir
         .join("llamabridge")
         .join("config")
         .join("bridge.yaml");
     if p.is_file() {
-        Some(p)
+        Ok(Some(p))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -85,20 +90,82 @@ impl Default for UserSettings {
     }
 }
 
+impl UserSettings {
+    fn validate(&self) -> Result<(), String> {
+        if self.activity_window_mins == 0 {
+            return Err("activity_window_mins must be at least 1".to_string());
+        }
+        if self.stale_timeout_secs == 0 {
+            return Err("stale_timeout_secs must be at least 1".to_string());
+        }
+        if self.claude_max_files == 0 || self.codex_max_files == 0 || self.copilot_max_files == 0 {
+            return Err("all source file limits must be at least 1".to_string());
+        }
+        if self.continue_correlation_secs == 0 {
+            return Err("continue_correlation_secs must be at least 1".to_string());
+        }
+        if !self.amber_threshold.is_finite()
+            || !self.red_threshold.is_finite()
+            || !(0.0..=1.0).contains(&self.amber_threshold)
+            || !(0.0..=1.0).contains(&self.red_threshold)
+            || self.amber_threshold >= self.red_threshold
+        {
+            return Err("thresholds must satisfy 0.0 ≤ amber < red ≤ 1.0".to_string());
+        }
+        if !self.context_overhead_pct.is_finite()
+            || !(0.0..=50.0).contains(&self.context_overhead_pct)
+        {
+            return Err("context_overhead_pct must be between 0 and 50".to_string());
+        }
+        Ok(())
+    }
+}
+
 /// Load settings from `<app_data_dir>/settings.json`.
-/// Returns defaults if the file is absent, empty, or malformed.
-pub fn load_settings(app_data_dir: &Path) -> UserSettings {
+/// A missing file intentionally uses defaults; unreadable or malformed files are errors.
+pub fn load_settings(app_data_dir: &Path) -> Result<UserSettings, String> {
     let path = app_data_dir.join("settings.json");
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return UserSettings::default();
+    if !path.exists() {
+        return Ok(UserSettings::default());
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
+    if content.trim().is_empty() {
+        return Err(format!("Settings file is empty: {}", path.display()));
     };
-    serde_json::from_str(&content).unwrap_or_default()
+    let settings: UserSettings = serde_json::from_str(&content)
+        .map_err(|error| format!("Invalid settings in {}: {error}", path.display()))?;
+    settings
+        .validate()
+        .map_err(|error| format!("Invalid settings in {}: {error}", path.display()))?;
+    Ok(settings)
 }
 
 /// Persist settings to `<app_data_dir>/settings.json`.
 pub fn save_settings(app_data_dir: &Path, settings: &UserSettings) -> std::io::Result<()> {
+    settings.validate().map_err(std::io::Error::other)?;
     std::fs::create_dir_all(app_data_dir)?;
     let path = app_data_dir.join("settings.json");
     let content = serde_json::to_string_pretty(settings).map_err(std::io::Error::other)?;
     std::fs::write(path, content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UserSettings;
+
+    #[test]
+    fn rejects_inverted_thresholds() {
+        let settings = UserSettings {
+            amber_threshold: 0.4,
+            red_threshold: 0.2,
+            ..UserSettings::default()
+        };
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_defaults() {
+        assert!(UserSettings::default().validate().is_ok());
+    }
 }
