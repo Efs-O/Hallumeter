@@ -1,6 +1,9 @@
 // HalluMeter
 
-use crate::core::{interpolate_curve, load_curves, risk_to_state, AMBER_THRESHOLD, RED_THRESHOLD};
+use crate::core::{
+    context_window_for, estimate_risk, find_model_curve, interpolate_curve, load_curves,
+    risk_to_state, AMBER_THRESHOLD, RED_THRESHOLD,
+};
 
 #[test]
 fn interpolates_midpoint() {
@@ -42,6 +45,37 @@ fn exact_knot_point() {
 #[test]
 fn unknown_model_has_no_risk_score() {
     assert_eq!(interpolate_curve("gpt-99-unknown", 50.0), None);
+}
+
+#[test]
+fn opus_5_has_its_own_curve() {
+    // Regression: claude-opus-5 was missing from curves.json, and 0.1.6's
+    // `context_window_for(&model)?` turned that into a hard "Source error".
+    assert!(interpolate_curve("claude-opus-5", 50.0).is_some());
+    assert_eq!(context_window_for("claude-opus-5"), Some(200_000));
+}
+
+#[test]
+fn unknown_model_falls_back_and_is_flagged_approximate() {
+    // Local Forge models (qwen/gemma GGUFs) match nothing in `models`.
+    let est = estimate_risk("qwen38-27b-mtp-q3km", 50.0).expect("fallback curve");
+    assert!(est.approximate, "fallback use must be flagged");
+    assert!(est.risk_score > 0.0);
+}
+
+#[test]
+fn known_model_is_not_flagged_approximate() {
+    let est = estimate_risk("claude-sonnet-4-6", 64.0).expect("known curve");
+    assert!(!est.approximate);
+    assert!((est.risk_score - 0.24).abs() < f64::EPSILON);
+}
+
+#[test]
+fn fallback_is_never_selected_by_family_prefix_matching() {
+    // The fallback lives outside `models`, so it can never be matched as a family
+    // prefix — otherwise an id like "fallback-x" would silently resolve to it.
+    assert!(find_model_curve("fallback").is_none());
+    assert_eq!(interpolate_curve("fallback", 50.0), None);
 }
 
 #[test]

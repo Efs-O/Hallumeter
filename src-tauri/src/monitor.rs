@@ -1,5 +1,5 @@
 use crate::audio::AudioPlayer;
-use crate::core::{interpolate_curve, risk_to_state, ContextPayload};
+use crate::core::{estimate_risk, risk_to_state, ContextPayload};
 use crate::settings::UserSettings;
 use crate::sources::{
     read_claude_jsonl_usage, read_codex_jsonl_usage, read_continue_usage, read_copilot_usage,
@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Emitter;
 
-type Candidate = (String, f64, String, u64, i64, String, f64);
+type Candidate = (String, f64, String, u64, i64, String, f64, bool);
 
 pub struct Monitor {
     app: tauri::AppHandle,
@@ -119,12 +119,19 @@ impl Monitor {
             .filter_map(
                 |(model, fill_pct, session, tokens, active_ms, session_id)| {
                     let adjusted = (fill_pct + self.cfg.context_overhead_pct).clamp(0.0, 100.0);
-                    let Some(risk) = interpolate_curve(&model, adjusted) else {
+                    let Some(risk) = estimate_risk(&model, adjusted) else {
                         unsupported.push((model, session, active_ms));
                         return None;
                     };
                     Some((
-                        model, adjusted, session, tokens, active_ms, session_id, risk,
+                        model,
+                        adjusted,
+                        session,
+                        tokens,
+                        active_ms,
+                        session_id,
+                        risk.risk_score,
+                        risk.approximate,
                     ))
                 },
             )
@@ -161,7 +168,12 @@ impl Monitor {
     }
 
     fn emit_active(&mut self, candidate: Candidate, diagnostic: Option<String>) {
-        let (model, fill_pct, session, tokens, _, session_id, risk_score) = candidate;
+        let (model, fill_pct, session, tokens, _, session_id, risk_score, approximate) = candidate;
+        // A source error is worth more to the user than the approximate-curve notice,
+        // so only fall back to the latter when there is nothing else to report.
+        let diagnostic = diagnostic.or_else(|| {
+            approximate.then(|| format!("Approximate curve — no benchmark data for {model}"))
+        });
         let state =
             risk_to_state(risk_score, self.cfg.amber_threshold, self.cfg.red_threshold).to_string();
         self.last_data = Some(Instant::now());
@@ -186,6 +198,7 @@ impl Monitor {
                 variant,
                 tokens,
                 diagnostic,
+                approximate,
             },
             true,
         );
@@ -232,6 +245,7 @@ impl Monitor {
                 variant: 0,
                 tokens: 0,
                 diagnostic: Some(diagnostic),
+                approximate: false,
             },
             false,
         );
@@ -249,6 +263,7 @@ impl Monitor {
                 variant: 0,
                 tokens: 0,
                 diagnostic,
+                approximate: false,
             },
             false,
         );

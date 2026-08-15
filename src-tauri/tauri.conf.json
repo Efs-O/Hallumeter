@@ -1,6 +1,6 @@
 {
   "productName": "HalluMeter",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "identifier": "dev.hallumeter.app",
   "build": {
     "beforeDevCommand": "npm run dev",

@@ -1,6 +1,6 @@
 {
-  "version": "3",
-  "last_updated": "2026-07-19",
+  "version": "4",
+  "last_updated": "2026-08-15",
   "reasoning_assumption": "medium",
   "notes": "Claude curves eased 13/04/2026 based on 2026 benchmark data (AA-Omniscience, Vectara Enterprise, BullshitBench v2). Baseline knot added at fill=5% for Sonnet and Opus — Claude Code reserves ~8-12K tokens on session start for system prompt, memory, tools, and auto-compact headroom; GPT and local models start near true zero so no baseline knot. GPT and Gemini curves are community estimates — context window ambiguity unresolved. See RESEARCH_CURVES.md and RESEARCH.md for full sourcing notes.",
   "models": [
@@ -58,6 +58,22 @@
       "context_window": 200000,
       "reasoning_assumption": "medium",
       "curve_source": "Cloned from claude-opus-4-6 on 19/07/2026 pending benchmark data. Baseline knot fill=5% — Claude Code overhead.",
+      "degradation_curve": [
+        { "fill_pct": 0,   "risk_score": 0.00 },
+        { "fill_pct": 5,   "risk_score": 0.02 },
+        { "fill_pct": 25,  "risk_score": 0.06 },
+        { "fill_pct": 40,  "risk_score": 0.10 },
+        { "fill_pct": 64,  "risk_score": 0.15 },
+        { "fill_pct": 85,  "risk_score": 0.25 },
+        { "fill_pct": 100, "risk_score": 0.34 }
+      ]
+    },
+    {
+      "id": "claude-opus-5",
+      "display_name": "Claude Opus 5",
+      "context_window": 200000,
+      "reasoning_assumption": "medium",
+      "curve_source": "Cloned from claude-opus-4-8 on 15/08/2026 pending benchmark data. Baseline knot fill=5% — Claude Code overhead.",
       "degradation_curve": [
         { "fill_pct": 0,   "risk_score": 0.00 },
         { "fill_pct": 5,   "risk_score": 0.02 },
@@ -145,5 +161,21 @@
         { "fill_pct": 100, "risk_score": 0.62 }
       ]
     }
-  ]
+  ],
+  "fallback": {
+    "id": "fallback",
+    "display_name": "Unknown model (approximate)",
+    "context_window": 200000,
+    "reasoning_assumption": "medium",
+    "curve_source": "Generic placeholder — shape cloned from claude-sonnet-4-6, which was the implicit fallback before 0.1.6. NOT measured for any specific model. Used only when a model id matches no entry in `models`, and every such reading is flagged `approximate: true` and labelled in the UI. Local quantised models likely degrade FASTER than this curve suggests, so treat it as a floor, not an estimate. Replace with a measured entry in `models` as soon as benchmark data exists for a given model.",
+    "degradation_curve": [
+      { "fill_pct": 0,   "risk_score": 0.00 },
+      { "fill_pct": 5,   "risk_score": 0.03 },
+      { "fill_pct": 25,  "risk_score": 0.10 },
+      { "fill_pct": 40,  "risk_score": 0.16 },
+      { "fill_pct": 64,  "risk_score": 0.24 },
+      { "fill_pct": 85,  "risk_score": 0.37 },
+      { "fill_pct": 100, "risk_score": 0.45 }
+    ]
+  }
 }

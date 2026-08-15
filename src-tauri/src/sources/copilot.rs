@@ -213,14 +213,10 @@ pub fn read_copilot_usage(activity_secs: u64, max_files: usize) -> UsageResult {
         let session_id = dir.to_string_lossy().into_owned();
         usages.push((model, fill_pct, session, tokens, last_active_ms, session_id));
     }
-    if recent.is_empty() {
-        return Ok(None);
-    }
-    usages
+    // See claude.rs: absence of a parseable record is not a source error.
+    Ok(usages
         .into_iter()
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-        .map(Some)
-        .ok_or_else(|| "No recognizable Copilot usage record in recent session files".to_string())
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)))
 }
 
 #[cfg(test)]

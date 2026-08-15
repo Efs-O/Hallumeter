@@ -26,6 +26,9 @@ pub struct ContextPayload {
     pub tokens: u64,     // raw input token count for the current session
     /// A user-visible explanation for unavailable/degraded monitoring.
     pub diagnostic: Option<String>,
+    /// True when `risk_score` came from the generic fallback curve rather than a
+    /// curve measured for this model. The UI must mark the reading as approximate.
+    pub approximate: bool,
 }
 
 // --- Curve data structures ---
@@ -46,6 +49,10 @@ pub struct ModelCurve {
 #[derive(Deserialize, Debug)]
 pub struct CurvesConfig {
     pub models: Vec<ModelCurve>,
+    /// Generic curve used when a model id matches nothing in `models`. Deliberately
+    /// kept out of `models` so family-prefix matching can never select it by accident,
+    /// and so every use of it is explicitly flagged as approximate to the user.
+    pub fallback: Option<ModelCurve>,
 }
 
 // Embedded at compile time — single source of truth
@@ -81,11 +88,8 @@ pub fn context_window_for(model: &str) -> Option<u64> {
     find_model_curve(model).map(|m| m.context_window)
 }
 
-/// Looks up model in curves.json and interpolates risk score for given fill %.
-/// Unknown models return `None`; HalluMeter must not report a synthetic risk score.
-pub fn interpolate_curve(model: &str, fill_pct: f64) -> Option<f64> {
-    let mc = find_model_curve(model)?;
-    let pts = &mc.degradation_curve;
+/// Linear interpolation across a curve's knots, clamped at both ends.
+fn interpolate_points(pts: &[CurvePoint], fill_pct: f64) -> Option<f64> {
     if pts.is_empty() {
         return None;
     }
@@ -105,6 +109,39 @@ pub fn interpolate_curve(model: &str, fill_pct: f64) -> Option<f64> {
         }
     }
     Some(last.risk_score)
+}
+
+/// Looks up model in curves.json and interpolates risk score for given fill %.
+/// Exact/family match only — unknown models return `None`. Callers that want the
+/// generic fallback must use `estimate_risk`, which reports when it was used.
+pub fn interpolate_curve(model: &str, fill_pct: f64) -> Option<f64> {
+    interpolate_points(&find_model_curve(model)?.degradation_curve, fill_pct)
+}
+
+/// A risk score plus whether it came from the generic fallback curve.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RiskEstimate {
+    pub risk_score: f64,
+    /// True when no curve matched the model id and the generic fallback was used.
+    /// Callers MUST surface this — an unlabelled fallback is a synthetic score,
+    /// which is exactly what the 0.1.5 audit set out to eliminate.
+    pub approximate: bool,
+}
+
+/// Risk for a model, falling back to the generic curve for unknown ids.
+/// Returns `None` only when the id is unknown AND no fallback curve is defined.
+pub fn estimate_risk(model: &str, fill_pct: f64) -> Option<RiskEstimate> {
+    if let Some(risk_score) = interpolate_curve(model, fill_pct) {
+        return Some(RiskEstimate {
+            risk_score,
+            approximate: false,
+        });
+    }
+    let fallback = load_curves().fallback.as_ref()?;
+    interpolate_points(&fallback.degradation_curve, fill_pct).map(|risk_score| RiskEstimate {
+        risk_score,
+        approximate: true,
+    })
 }
 
 /// Maps a risk score to a state string using the provided thresholds.

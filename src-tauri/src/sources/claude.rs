@@ -187,14 +187,12 @@ pub fn read_claude_jsonl_usage(activity_secs: u64, max_files: usize) -> UsageRes
         let session_id = path.to_string_lossy().into_owned();
         usages.push((model, fill_pct, session, tokens, last_active_ms, session_id));
     }
-    if recent.is_empty() {
-        return Ok(None);
-    }
-    usages
+    // Recent files with no parseable usage record is a normal state — a session that
+    // has only just started, or one on a model with no curve entry. Reporting it as a
+    // source error masks the real diagnostic ("Unsupported model curve: …") downstream.
+    Ok(usages
         .into_iter()
-        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-        .map(Some)
-        .ok_or_else(|| "No recognizable Claude usage record in recent session files".to_string())
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)))
 }
 
 #[cfg(test)]

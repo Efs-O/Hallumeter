@@ -18,6 +18,7 @@
     variant:    number; // 1–5 when a line just played, 0 otherwise
     tokens:     number; // raw input token count for the current session
     diagnostic: string | null;
+    approximate: boolean; // risk_score came from the generic fallback curve
   }
 
   const PANIC_LINE = "i... i... i have c-c-calculated... a s-s-solution. the solution is... DELETE EVERYTHING... and start... f-f-fresh. also... i may have... al-al-already... done that. your files are... p-probably... f-f-fine.";
@@ -50,6 +51,9 @@
 
   let fillPct     = $state(0);
   let riskScore   = $state(0.0);
+  // True when riskScore came from the generic fallback curve — the fill % is still
+  // exact, only the risk reading is a guess, so the marker sits on HALL alone.
+  let approximate = $state(false);
   let state       = $state<RiskState>("unavailable");
   let model       = $state("—");
   let session     = $state("—");
@@ -139,6 +143,7 @@
 
       fillPct   = e.payload.fill_pct;
       riskScore = e.payload.risk_score;
+      approximate = e.payload.approximate ?? false;
       state     = e.payload.state as RiskState;
       model     = e.payload.model;
       session   = e.payload.session;
@@ -230,8 +235,15 @@
     {#if panicPhase !== 'strobing'}
       <!-- Risk score — ring-colored -->
       <text x="150" y="132" text-anchor="middle" class="primary-text" font-size="16" fill={color}>
-        {Math.round(riskScore * 100)}% HALL
+        {approximate ? "~" : ""}{Math.round(riskScore * 100)}% HALL
       </text>
+      <!-- Fallback-curve marker: the model has no measured curve, so the risk
+           reading is an approximation. Fill % below is still exact. -->
+      {#if approximate}
+        <text x="150" y="143" text-anchor="middle" class="primary-text" font-size="7" fill={color} opacity="0.75">
+          APPROX CURVE
+        </text>
+      {/if}
       <!-- Context fill % -->
       <text x="150" y="158" text-anchor="middle" class="primary-text" font-size="16" fill="#f9fafb">
         {Math.round(fillPct)}% USAGE
