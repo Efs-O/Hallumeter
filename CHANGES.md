@@ -1,5 +1,17 @@
 # HalluMeter — Recent Changes
 
+## 0.1.8 — Context menu stays inside the window
+
+- **Right-click menu no longer opens outside the window.** `.ctx-menu` was positioned at the
+  raw click coordinates with no clamping, so right-clicking the hide dash (`right: 7px`) laid
+  the ~110 px menu out past the right edge of the borderless window, where `overflow: hidden`
+  clips it away. The menu position is now clamped into the viewport with a 4 px margin, using
+  the menu's measured size (`bind:clientWidth/clientHeight`, seeded with its design size so
+  the first frame is already correct). Also fixes the same overflow at the bottom edge near
+  the bottom bar and the left edge near the diagnostic `!` button. (`App.svelte`)
+
+---
+
 ## 0.1.5 — Curve refresh + audit round 2
 
 Fixes from the follow-up audit (see `AUDIT_REPORT_0.1.4.md` / `IMPLEMENTATION_PLAN_0.1.5.md`):

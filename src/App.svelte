@@ -104,6 +104,21 @@
   let ctxMenuVisible = $state(false);
   let ctxX           = $state(0);
   let ctxY           = $state(0);
+  // Measured on mount; seeded with the menu's design size so the very first
+  // frame is already clamped instead of flashing off-window.
+  let ctxW           = $state(110);
+  let ctxH           = $state(70);
+  const CTX_MARGIN   = 4;
+
+  // The window is borderless with overflow:hidden — anything past the edge is
+  // simply gone, so pin the menu inside the viewport. Right-clicking the hide
+  // dash (top-right) or the bottom bar would otherwise drop it outside.
+  let ctxLeft = $derived(
+    Math.max(CTX_MARGIN, Math.min(ctxX, window.innerWidth  - ctxW - CTX_MARGIN)),
+  );
+  let ctxTop = $derived(
+    Math.max(CTX_MARGIN, Math.min(ctxY, window.innerHeight - ctxH - CTX_MARGIN)),
+  );
 
   let color   = $derived(stateToColor(state));
   let message = $derived(stateToMessage(state));
@@ -305,7 +320,12 @@
   {#if ctxMenuVisible}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="ctx-backdrop" onclick={closeCtxMenu} role="presentation"></div>
-    <div class="ctx-menu" style="left:{ctxX}px; top:{ctxY}px;">
+    <div
+      class="ctx-menu"
+      style="left:{ctxLeft}px; top:{ctxTop}px;"
+      bind:clientWidth={ctxW}
+      bind:clientHeight={ctxH}
+    >
       <button onclick={() => { closeCtxMenu(); getCurrentWindow().hide().catch(e => reportUiError("Hide failed", e)); }}>Hide</button>
       <button onclick={() => exit(0).catch(e => reportUiError("Quit failed", e))}>Quit</button>
     </div>
